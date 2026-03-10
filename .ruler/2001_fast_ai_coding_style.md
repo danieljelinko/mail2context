@@ -40,11 +40,11 @@ alwaysApply: true
 - Example:
      ```python
     def print_var(var1: str # extra not obvious information about the variable that is not obvious from the variable name
-        ) -> None: 
+        ) -> None:
     """ Additional info about the function logic, parameters, return value, etc. that is not obvious from the function name or parameters. """
     print(var1)
     ```
-    
+
 - Use backticks for parameter names in docstrings.
 - Reference equation numbers when implementing from papers.
 - Use type hints for all functions.

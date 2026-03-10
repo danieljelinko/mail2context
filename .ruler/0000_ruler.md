@@ -40,7 +40,7 @@ Rules are distributed via the `sync-ruler-rules.sh` automation script which:
 
 The automation is triggered manually but agents can request rule updates by asking to:
 1. Run the `sync-ruler-rules.sh` script
-2. Execute `ruler apply` in specific repositories  
+2. Execute `ruler apply` in specific repositories
 3. Verify rule distribution and functionality
 
 ## Repository Types

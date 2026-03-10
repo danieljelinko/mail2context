@@ -25,7 +25,7 @@ project-root/
 │   │   │   ├── __init__.py
 │   │   │   ├── module_name.py    # From notebooks
 │   │   │   └── ...
-│   │   ├── __init__.py             
+│   │   ├── __init__.py
 │   │   └── 002_module_name.py    # Normal python modules (not generated from notebooks, thus can be edited directly)
 │   └── submodule2/
 ├── docs/                         # Generated documentation
@@ -37,7 +37,7 @@ project-root/
 
 ### settings.ini (Project Root)
 - `lib_path` = package directory name
-- `nbs_path` = notebooks directory (usually "nbs")  
+- `nbs_path` = notebooks directory (usually "nbs")
 - `doc_path` = documentation output (usually "_docs")
 - `recursive = True` for submodule support
 
