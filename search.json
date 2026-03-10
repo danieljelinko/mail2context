@@ -1,0 +1,12 @@
+[
+  {
+    "objectID": "core.html",
+    "href": "core.html",
+    "title": "core",
+    "section": "",
+    "text": "hello\n\ndef hello(\n    \n):\n\nSay hello\n\ntest_eq(hello(), \"Hello from mail2context!\")",
+    "crumbs": [
+      "core"
+    ]
+  }
+]
