@@ -49,24 +49,6 @@ Example in notebook first cell:
 #|default_exp {submodule}.gen.{module_name}
 ```
 
-## API Aggregation Pattern
-
-### Public API Exposure
-Each `{submodule}` uses an aggregator pattern in `__init__.py`:
-
-```python
-# {package}/{submodule}/__init__.py`
-from ..utils.nbdev_utils import reexport_into, reexport_current_dir_modules, enable_deep_module_imports_from_gen
-
-# Load nbdev-generated modules first, then current directory modules
-__all__ = []
-reexport_into(__name__ + ".gen", globals(), __all__)
-reexport_current_dir_modules(__name__, __file__, globals(), __all__)
-
-# Enable deep module imports like: from package.submodule.module_name import function
-enable_deep_module_imports_from_gen(__name__, __file__)
-```
-
 ## Import Patterns
 
 ### Public API (Recommended)
