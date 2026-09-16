@@ -130,3 +130,55 @@ def test_build_message_sets_cc_only_when_given():
     # When we inspect it
     # Then no empty Cc header is emitted
     assert m['Cc'] is None
+
+
+def test_build_message_adds_an_html_alternative_so_clients_do_not_render_monospace():
+    # Given a two-paragraph body
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', body='First para.\n\nSecond para.', frm='me@x')
+
+    # When we look for an HTML part
+    html = m.get_body(('html',))
+
+    # Then one exists, with each paragraph marked up
+    assert html is not None
+    assert '<p>First para.</p>' in html.get_content()
+    assert '<p>Second para.</p>' in html.get_content()
+
+
+def test_html_alternative_keeps_deliberate_line_breaks_inside_a_paragraph():
+    # Given a signature block, where the line breaks are meant
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', body='Dani JELINKO\nAI4HU | AI for humans', frm='me@x')
+
+    # When we read the HTML part
+    html = m.get_body(('html',)).get_content()
+
+    # Then the break is preserved rather than collapsed into one line
+    assert '<br>' in html
+
+
+def test_html_alternative_escapes_markup_so_a_body_cannot_inject_html():
+    # Given a body containing characters that are markup in HTML
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', body='Coût < 100 & "urgent"', frm='me@x')
+
+    # When we read the HTML part
+    html = m.get_body(('html',)).get_content()
+
+    # Then they are escaped, not emitted raw
+    assert '&lt; 100 &amp;' in html
+
+
+def test_build_reply_also_carries_an_html_alternative():
+    # Given a reply built from a thread
+    from email.message import EmailMessage
+    last = EmailMessage()
+    last['From'], last['Subject'], last['Message-ID'] = 'b@x', 'Budget', '<b@x>'
+    last.set_content('x')
+
+    # When we build the reply
+    r = build_reply([last], body='Bonjour,\n\nMerci.', frm='me@x')
+
+    # Then it too has an HTML part, so replies are not monospace either
+    assert r.get_body(('html',)) is not None

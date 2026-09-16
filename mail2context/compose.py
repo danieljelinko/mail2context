@@ -1,4 +1,5 @@
 "Compose replies as RFC 5322 messages. Drafts only — nothing here sends (D-003)."
+import html as _html
 import re
 from email.message import EmailMessage
 from email.utils import formatdate, getaddresses, make_msgid
@@ -7,6 +8,19 @@ __all__ = ['build_message', 'build_reply', 'list_participants']
 
 # Autoresponders and forwards stack markers onto the subject; strip them all, then add one Re:.
 _NOISE_PREFIX = re.compile(r'^\s*((re|fwd?|tr|auto|automatic reply)\s*:\s*)+', re.I)
+
+
+def _as_html(body: str) -> str:
+    "Minimal HTML for `body`: blank lines start paragraphs, single newlines are breaks."
+    paras = [p for p in re.split(r'\n\s*\n', body.strip()) if p.strip()]
+    return '\n'.join('<p>' + '<br>'.join(_html.escape(ln) for ln in p.splitlines()) + '</p>'
+                      for p in paras)
+
+
+def _set_body(m: EmailMessage, body: str) -> None:
+    "Set the plain body plus an HTML alternative, so clients do not render it monospace."
+    m.set_content(body)
+    m.add_alternative(_as_html(body), subtype='html')
 
 
 def _reply_subject(subj: str) -> str:
@@ -57,7 +71,7 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
     if last.get('Message-ID'): m['In-Reply-To'] = last['Message-ID']
     refs = _reply_refs(last)
     if refs: m['References'] = refs
-    m.set_content(body)
+    _set_body(m, body)
     return m
 
 
@@ -72,5 +86,5 @@ def build_message(to: str,        # one address, or several comma-separated
     if cc: m['Cc'] = cc
     m['Date'] = formatdate(localtime=True)
     m['Message-ID'] = make_msgid()
-    m.set_content(body)
+    _set_body(m, body)
     return m
