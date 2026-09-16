@@ -62,7 +62,8 @@ Implement the guard **test-first, before any send code exists** — **DONE 2026-
 - [ ] Reply from Gmail's web UI so a **real** `gmail_quote` block is generated, then verify
       stripping — so far quote stripping is tested against fixtures and observed mail only
 - [ ] Same via Proton's UI for `protonmail_quote`
-- [ ] Attachment round-trip: filenames surface, bytes match
+- [ ] Attachment round-trip: filenames surface, bytes match (bytes compared by digest inside
+      `check_attachment`; surfacing attachment *contents* to the LLM is split out — D-016)
 
 ## Phase 4 — Behaviour round-trip
 - [ ] `\Answered` set after replying; `\Seen` never set by our reads (assert after a full scan)
@@ -90,6 +91,10 @@ The authorisation in D-011 is temporary. When Phases 1-5 pass:
 
 **Leaving send enabled after validation violates D-011.** Treat this phase as part of the work,
 not cleanup to do later.
+
+## Later — attachment contents (split out of Phase 3, D-016)
+- [ ] Surface attachment *contents*, not just filenames: decide formats (txt/pdf/docx), where the
+      extracted text goes, size limits. Own phase after Phase 6; needs no send capability.
 
 ## Success criteria
 
