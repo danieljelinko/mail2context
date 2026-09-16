@@ -39,7 +39,11 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
                 ) -> EmailMessage:
     "Build a reply to the last message of `thread`, threaded via In-Reply-To/References."
     last = thread[-1]
-    addrs = getaddresses([last.get('Reply-To') or last.get('From') or ''])
+    src = last.get('Reply-To') or last.get('From') or ''
+    # Replying to our own last message (chasing an unanswered mail) must not address ourselves:
+    # fall back to whoever that message went to, which is what a mail client does.
+    if frm.lower() in src.lower(): src = last.get('To') or src
+    addrs = getaddresses([src])
     m = EmailMessage()
     m['From'] = frm
     m['To'] = to or ', '.join(a for _, a in addrs if a)

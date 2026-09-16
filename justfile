@@ -83,6 +83,10 @@ draft key body account="proton" limit="400":
 
 # --- verification -----------------------------------------------------------
 
+# Full control over a draft: --to "a@x, b@y" --all --file BODY --dry-run --account --limit
+draft-args *args:
+    @{{_m2c}} draft {{args}}
+
 # Measure what HTML->text conversion loses. Exits non-zero if anything is lost.
 audit account="proton" limit="400":
     @{{_m2c}} audit --account {{account}} --limit {{limit}}

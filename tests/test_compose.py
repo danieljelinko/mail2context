@@ -95,3 +95,14 @@ def test_list_participants_names_everyone_in_the_thread_except_the_author(make_m
 
     # Then both correspondents appear and we do not
     assert set(who) == {'barbara@ap.fr', 'elodie@ap.fr'}
+
+
+def test_build_reply_addresses_the_original_recipients_when_we_sent_the_last_message(make_mail):
+    # Given a thread whose last message is our own, as when we are chasing a reply
+    mine = make_mail('dj@ai4hu.org', to='elodie@ap.fr', msgid='<b@x>')
+
+    # When we reply to that thread
+    r = build_reply([mine], body='ok', frm='dj@ai4hu.org')
+
+    # Then it goes to who we wrote to, not back to ourselves
+    assert r['To'] == 'elodie@ap.fr'
