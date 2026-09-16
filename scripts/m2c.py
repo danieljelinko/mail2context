@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 from mail2context.audit import audit_messages
 from mail2context.compose import build_message, build_reply, list_participants
 from mail2context.markdown_mail import render_markdown
-from mail2context.mailbox import (append_draft, connect, fetch_recent, list_folders,
-                                  load_account, search_messages)
+from mail2context.mailbox import (append_draft, check_account, connect, fetch_recent,
+                                  list_folders, load_account, search_messages)
 from mail2context.search import build_search_criteria, flags_of, is_unread
 from mail2context.render import render_thread
 from mail2context.thread import group_threads, message_id, sent_at, thread_key
@@ -65,6 +65,17 @@ def cmd_accounts(a):
         except SystemExit as e: print(f"  {name:8} not configured — {e}")
         except (OSError, imaplib.IMAP4.error, ssl.SSLError, KeyError) as e:
             print(f"  {name:8} FAILED — {type(e).__name__}: {e}")
+
+
+def cmd_bridge_status(a):
+    "Whether Proton Bridge is actually serving mail. Logs in — a listening port proves nothing."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    ok, detail = check_account(load_account('proton'))
+    if ok: print(f"Bridge IMAP: up on 1143 ({detail})"); return
+    print(f"Bridge IMAP: DOWN — {detail}")
+    print("  start it:  systemctl --user start protonmail-bridge")
+    print("  or:        /usr/lib/protonmail/bridge/bridge --cli   (never /usr/bin/protonmail-bridge — it opens a GUI)")
+    raise SystemExit(1)
 
 
 def cmd_folders(a):
@@ -233,6 +244,7 @@ def main():
         return sp
 
     sub.add_parser('accounts', help=cmd_accounts.__doc__).set_defaults(fn=cmd_accounts)
+    sub.add_parser('bridge-status', help=cmd_bridge_status.__doc__).set_defaults(fn=cmd_bridge_status)
     f = sub.add_parser('folders', help=cmd_folders.__doc__); f.add_argument('--account', default='proton')
     f.set_defaults(fn=cmd_folders)
 

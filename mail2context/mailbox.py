@@ -10,8 +10,8 @@ from email.parser import BytesParser
 
 from .search import annotate_flags, parse_flags
 
-__all__ = ['Account', 'append_draft', 'connect', 'fetch_recent', 'list_folders', 'list_uids',
-           'load_account', 'move_message', 'search_messages']
+__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'list_folders',
+           'list_uids', 'load_account', 'move_message', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
 
@@ -36,17 +36,30 @@ def load_account(name: str) -> Account:
                    os.environ[f'{p}_USER'], pw, starttls=host in _LOCAL)
 
 
-def connect(acct: Account) -> imaplib.IMAP4:
+def connect(acct: Account,
+            timeout: float | None = None,  # seconds; None blocks, which is right for bulk fetches
+            ) -> imaplib.IMAP4:
     "Open an authenticated IMAP connection to `acct`."
-    if not acct.starttls: M = imaplib.IMAP4_SSL(acct.host, acct.port)
+    if not acct.starttls: M = imaplib.IMAP4_SSL(acct.host, acct.port, timeout=timeout)
     else:
-        M = imaplib.IMAP4(acct.host, acct.port)
+        M = imaplib.IMAP4(acct.host, acct.port, timeout=timeout)
         ctx = ssl.create_default_context()
         if acct.host in _LOCAL:                       # Bridge serves a self-signed cert on loopback
             ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
         M.starttls(ssl_context=ctx)
     M.login(acct.user, acct.password)
     return M
+
+
+def check_account(acct: Account, timeout: float = 10) -> tuple[bool, str]:
+    "Whether `acct` serves mail, by logging in. Bridge binds 1143 before loading the vault, so a listening port is not evidence."
+    try:
+        M = connect(acct, timeout=timeout)
+        n = len(list_folders(M))
+        M.logout()
+        return True, f'{n} folders'
+    except (OSError, imaplib.IMAP4.error, ssl.SSLError) as e:
+        return False, f'{type(e).__name__}: {e}'
 
 
 def _quote(folder: str) -> str:

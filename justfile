@@ -121,6 +121,6 @@ check: test lint
 
 # --- Proton Bridge ----------------------------------------------------------
 
-# Is Bridge up and serving IMAP?
+# Is Bridge up and serving IMAP? Logs in — a listening port is not evidence.
 bridge-status:
-    @ss -tlnp 2>/dev/null | grep -q 127.0.0.1:1143 && echo "Bridge IMAP: up on 1143" || echo "Bridge IMAP: DOWN — start it, mail commands will fail"
+    @{{_m2c}} bridge-status
