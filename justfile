@@ -147,8 +147,8 @@ content-preview:
     @{{_rt}} content --run-id preview --dry-run
 
 # Phase 3: send the rich-content message Proton->Gmail and Gmail->Proton. Prints the run id.
-content-send:
-    @{{_rt}} content
+content-send run_id="":
+    @{{_rt}} content {{ if run_id == "" { "" } else { "--run-id " + run_id } }}
 
 # Phase 3: assert each delivered copy reads as sent — 0 loss, blue 4 intact, no monospace body, attachment bytes equal
 content-verify run_id:

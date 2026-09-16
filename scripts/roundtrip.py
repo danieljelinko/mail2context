@@ -31,6 +31,7 @@ _IDS = re.compile(r'<[^<>]+>')
 
 ROOT = Path(__file__).resolve().parent.parent
 ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}
+SPAM     = {'proton': 'Spam',     'gmail': '[Gmail]/Spam'}       # All Mail EXCLUDES spam on both
 ADDR = {'proton': 'dj@ai4hu.org', 'gmail': 'daniel.jelinko@gmail.com'}
 OTHER = {'proton': 'gmail', 'gmail': 'proton'}
 STEPS = 6
@@ -216,11 +217,18 @@ def _cattachment(run_id: str, sender: str) -> tuple[str, bytes]:
 
 
 def _cfetch(account: str, run_id: str) -> list:
-    "Every message of this content run visible to `account`, by server-side subject search."
+    "Every message of this content run visible to `account`, by subject search over All Mail AND Spam."
+    # Gmail filed the first rich message as spam, and All Mail does not contain the Spam folder:
+    # the runner waited 7 minutes for a message that had long since arrived. Search both, and
+    # tag each message with where it was found so the verdict can say "delivered, but as spam".
     M = connect(load_account(account))
-    msgs = search_messages(M, ALL_MAIL[account], ['SUBJECT', f'"{_csubject(run_id)}"'], 50)
+    out = []
+    for folder in (ALL_MAIL[account], SPAM[account]):
+        for m in search_messages(M, folder, ['SUBJECT', f'"{_csubject(run_id)}"'], 50):
+            m.folder = folder      # ad-hoc attribute, read by the reports below
+            out.append(m)
     M.logout()
-    return msgs
+    return out
 
 
 def _cdelivered(msgs: list, run_id: str, sender: str):
@@ -249,6 +257,13 @@ def _csend(run_id: str, sender: str, dry_run: bool) -> dict | None:
     name, data = _cattachment(run_id, sender)
     msg.add_attachment(data, maintype='text', subtype='plain', filename=name)
     digest = hashlib.sha256(data).hexdigest()
+    record = {'sender': sender, 'receiver': OTHER[sender], 'attachment': name, 'sha256': digest,
+              'size': len(data)}
+    if not dry_run and (got := _cdelivered(_cfetch(OTHER[sender], run_id), run_id, sender)) is not None:
+        # Resuming a run whose earlier attempt timed out: the mail is there, do not send it twice.
+        print(f"  {sender:6} -> {OTHER[sender]}: already delivered as {message_id(got)} "
+              f"(in {got.folder}), not re-sent\n")
+        return {**record, 'delivered_message_id': message_id(got), 'folder': got.folder}
     approved = check_recipients(msg)              # printed BEFORE anything leaves the machine
     print(f"  {sender:6} -> {', '.join(approved)}   (new conversation)")
     print(f"           subject    : {msg['Subject']}")
@@ -261,19 +276,22 @@ def _csend(run_id: str, sender: str, dry_run: bool) -> dict | None:
     send_message(load_smtp(sender), msg)
     print(f"           sent, waiting for it to reach {OTHER[sender]} ...", flush=True)
     got = _cwait(OTHER[sender], run_id, sender, timeout=420)
-    print(f"           delivered as {message_id(got)}\n", flush=True)
-    return {'sender': sender, 'receiver': OTHER[sender], 'delivered_message_id': message_id(got),
-            'attachment': name, 'sha256': digest, 'size': len(data)}
+    print(f"           delivered as {message_id(got)}  (in {got.folder})\n", flush=True)
+    return {**record, 'delivered_message_id': message_id(got), 'folder': got.folder}
 
 
 def send_content(run_id: str, dry_run: bool) -> str:
     "Send the rich-content message in BOTH directions, so each provider stores a delivered copy."
     print(f"run {run_id} — subject {_csubject(run_id)!r}\n")
-    dirs = [d for sender in ('proton', 'gmail') if (d := _csend(run_id, sender, dry_run))]
+    dirs = []
+    for sender in ('proton', 'gmail'):
+        if (d := _csend(run_id, sender, dry_run)) is None: continue
+        dirs.append(d)
+        # Written after EACH direction, so a timeout on the second leaves the first recorded.
+        _cledger(run_id).write_text(json.dumps({'run_id': run_id, 'directions': dirs,
+                                                'sent_at': datetime.now().astimezone().isoformat()}, indent=2))
     if dry_run: return run_id
     led = _cledger(run_id)
-    led.write_text(json.dumps({'run_id': run_id, 'sent_at': datetime.now().astimezone().isoformat(),
-                               'directions': dirs}, indent=2))
     print(f"ledger {led}\nnow run: just content-verify {run_id}")
     return run_id
 
@@ -293,7 +311,9 @@ def verify_content(run_id: str) -> None:
         got = _cdelivered(_cfetch(receiver, run_id), run_id, sender)
         print(f"\n{sender} -> {receiver}: ", end='')
         if got is None: problems.append(f'{sender}->{receiver}: rich message not found'); print('NOT FOUND'); continue
-        print(f"{message_id(got)}  {got.get_content_type()}")
+        print(f"{message_id(got)}  {got.get_content_type()}  in {got.folder}")
+        if got.folder == SPAM[receiver]:
+            print(f"  ! {receiver} filed it as SPAM — content is checked below regardless; the filing is a finding")
         ps = [f'{sender}->{receiver}: {p}' for p in check_content(got, sent, accent_color=BLUE)]
         ps += [f'{sender}->{receiver}: {p}' for p in check_attachment(got, d['attachment'], d['sha256'])]
         for p in ps: print(f"  - {p}")
