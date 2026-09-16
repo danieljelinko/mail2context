@@ -34,7 +34,9 @@ def render_markdown(md: str) -> str:
     "Render `md` as self-contained HTML with inline styles, safe to use as a mail body."
     # html=False escapes raw HTML rather than passing it through. breaks=True keeps single
     # newlines as <br>: in a mail body a line break is meant, unlike in a document.
-    html = MarkdownIt('commonmark', {'html': False, 'linkify': True, 'breaks': True}).render(md)
+    # The commonmark preset has no tables; enable the GFM rule so _STYLES['table'] is reachable.
+    md_it = MarkdownIt('commonmark', {'html': False, 'linkify': True, 'breaks': True}).enable('table')
+    html = md_it.render(md)
     soup = BeautifulSoup(html, 'html.parser')
     for tag in soup.find_all(True):
         style = _STYLES.get(tag.name)

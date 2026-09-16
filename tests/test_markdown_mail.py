@@ -1,3 +1,5 @@
+from bs4 import BeautifulSoup
+
 from mail2context.markdown_mail import render_markdown
 
 
@@ -69,3 +71,15 @@ def test_render_markdown_keeps_a_hard_wrapped_paragraph_as_one_paragraph():
     # When rendered
     # Then it is one paragraph, since markdown joins soft-wrapped lines
     assert html.count('<p') == 1
+
+
+def test_render_markdown_renders_a_pipe_table_as_a_styled_html_table():
+    # Given a Markdown table, which the commonmark preset alone does not understand
+    md = '| Colonne A | Colonne B |\n|---|---|\n| cellule-A1 | cellule-B1 |'
+
+    # When we render it
+    html = render_markdown(md)
+
+    # Then it becomes a real table carrying the inline styles reserved for it
+    assert '<table style=' in html and '<th style=' in html and '<td style=' in html
+    assert 'cellule-A1' in html and '|' not in BeautifulSoup(html, 'html.parser').get_text()
