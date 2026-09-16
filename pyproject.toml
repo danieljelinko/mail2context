@@ -9,6 +9,7 @@ description = "Converts email content into context for AI/LLM processing"
 authors = [{name = "Dani Daniel Helinko", email = "daniel.jelinko@gmail.com"}]
 requires-python=">=3.10"
 dependencies = [
+    "beautifulsoup4>=4.14.3",
     "fastcore>=1.5.29",
     "python-dotenv>=1.0.1",
 ]

@@ -1,7 +1,7 @@
 # Progress
 
 ## In flight
-- Phase 3 context rendering — quote/signature stripping, thread → markdown
+- Phase 3 context rendering — extraction + quote stripping done; thread → markdown next
 
 ## Next
 - Phase 4 draft composition via IMAP APPEND to `Drafts`
@@ -17,6 +17,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | Body extraction + quote stripping | 9 tests green; on 400 real msgs 41% of chars removed, residual quotes 1/400 |
 | 2026-09-16 | Validate threading on real Proton mail | 400 msgs → 262 threads, 105 multi-message, 0 mis-ordered in UTC; D-006 |
 | 2026-09-16 | Authenticate to Bridge IMAP as `dj@ai4hu.org` | LOGIN OK; 84 in INBOX; labels listed as `Labels/*` |
 | 2026-09-16 | Thread reconstruction from headers (union-find) | 4 pytest tests green incl. missing-middle case; passes under `-p no:randomly` |
