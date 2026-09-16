@@ -4,7 +4,7 @@ from email.message import EmailMessage
 
 from bs4 import BeautifulSoup
 
-__all__ = ['extract_text', 'list_attachments', 'render_thread']
+__all__ = ['extract_text', 'html_to_text', 'list_attachments', 'render_thread']
 
 _BLOCK_TAGS = ['p', 'div', 'br', 'tr', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote']
 
@@ -38,7 +38,11 @@ def _squash(s: str) -> str: return re.sub(r'\s+', '', s or '')
 
 def _inline_links(soup) -> None:
     "Rewrite anchors as markdown so the link target survives flattening."
-    for a in soup.find_all('a'):
+    # Deepest first: replacing an outer anchor detaches any anchor inside it, and the detached
+    # node's own replacement never reaches the tree. Bulk senders nest a tracked wrapper around a
+    # tracked button constantly, and html.parser keeps that nesting — 214 hrefs lost in 300 Gmail
+    # messages before this ordering. Same hazard as rewriting images before anchors, below.
+    for a in sorted(soup.find_all('a'), key=lambda t: len(list(t.parents)), reverse=True):
         href = (a.get('href') or '').strip()
         if not href.startswith(('http://', 'https://', 'mailto:')): continue
         text = a.get_text(' ', strip=True)
@@ -50,10 +54,15 @@ def _inline_images(soup) -> None:
     "Keep image alt text, which often carries the only content of a graphical mail."
     for img in soup.find_all('img'):
         alt = (img.get('alt') or '').strip()
-        img.replace_with(f'[image: {alt}]' if alt else '')
+        if alt: img.insert_before(f'[image: {alt}]')
+        # Mail that mixes bare <img> with self-closed <img/> makes html.parser treat the latter as
+        # a container, so a following anchor is parsed INSIDE the image. Replacing it outright
+        # would take that anchor's href with it; unwrap keeps whatever was parsed in.
+        if img.contents: img.unwrap()
+        else:            img.decompose()
 
 
-def _html_to_text(html: str, strip_quotes: bool) -> str:
+def html_to_text(html: str, strip_quotes: bool) -> str:
     "Flatten `html` to text, optionally dropping quoted originals and signatures first."
     soup = BeautifulSoup(html, 'html.parser')
     for bad in soup(['script', 'style', 'head']): bad.decompose()
@@ -74,7 +83,7 @@ def extract_text(msg: EmailMessage, strip_quotes: bool = True) -> str:
         if text: return _cut_at_attribution(text) if strip_quotes else text  # empty plain part alongside HTML is common
     html = msg.get_body(('html',))
     if not html: return ''
-    text = _html_to_text(html.get_content(), strip_quotes)
+    text = html_to_text(html.get_content(), strip_quotes)
     return _cut_at_attribution(text) if strip_quotes else text
 
 

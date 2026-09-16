@@ -123,3 +123,32 @@ def test_extract_text_keeps_image_alt_when_the_image_sits_inside_a_link(make_mai
     # Then neither the alt text nor the link target is lost
     assert 'Register now' in out
     assert 'https://ai4hu.org/go' in out
+
+
+def test_extract_text_keeps_both_targets_when_one_link_is_nested_inside_another(make_mail):
+    # Given an anchor nested inside another anchor, which html.parser preserves as a real nesting
+    # and which bulk senders emit constantly (a tracked wrapper around a tracked button)
+    m = make_mail(html='<p><a href="https://track.example/outer">'
+                       '<a href="https://ai4hu.org/inner">Register</a></a></p>')
+
+    # When we extract it
+    out = extract_text(m, strip_quotes=False)
+
+    # Then neither target is silently dropped
+    assert 'https://track.example/outer' in out
+    assert 'https://ai4hu.org/inner' in out
+
+
+def test_extract_text_keeps_link_target_when_malformed_mail_nests_it_inside_an_image(make_mail):
+    # Given a bare <img> followed by a self-closed one — the mix bulk senders emit, which makes
+    # html.parser treat the second as a container and park the following anchor INSIDE it, so
+    # replacing that image outright would take the anchor with it
+    m = make_mail(html='<img src="logo.png" alt="brand">'
+                       '<img src="p.gif" alt="" width="1" height="1"/>'
+                       '<a href="https://tracking.example/pixel"></a>')
+
+    # When we extract it
+    out = extract_text(m, strip_quotes=False)
+
+    # Then the link target survives the image rewrite
+    assert 'https://tracking.example/pixel' in out
