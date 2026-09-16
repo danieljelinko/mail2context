@@ -11,9 +11,11 @@ from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
 from mail2context.compose import build_reply
-from mail2context.mailbox import append_draft, connect, fetch_recent, list_folders, load_account
+from mail2context.mailbox import (append_draft, connect, fetch_recent, list_folders,
+                                  load_account, search_messages)
+from mail2context.search import build_search_criteria, flags_of, is_unread
 from mail2context.render import render_thread
-from mail2context.thread import group_threads, sent_at, thread_key
+from mail2context.thread import group_threads, message_id, sent_at, thread_key
 
 DRAFTS   = {'proton': 'Drafts',   'gmail': '[Gmail]/Drafts'}
 ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}   # Gmail namespaces its system folders
@@ -62,15 +64,64 @@ def cmd_folders(a):
     M.logout()
 
 
+def _needs_reply(thread: list, me: str) -> bool:
+    "Whether the last word in `thread` was someone else's."
+    return me.lower() not in (thread[-1].get('From') or '').lower()
+
+
+def _status(thread: list, me: str) -> str:
+    "Compact per-thread status: unread count, answered, awaiting your reply."
+    n = sum(is_unread(m) for m in thread)
+    marks = []
+    if n:                            marks.append(f'{n} unread')
+    if _needs_reply(thread, me):     marks.append('awaiting you')
+    if any('\\Answered' in flags_of(m) for m in thread): marks.append('answered')
+    return ', '.join(marks)
+
+
+def _print_threads(threads: list, show: int, me: str) -> None:
+    "Render a thread list with status markers."
+    for t in threads[:show]:
+        who = sorted({(m['From'] or '').split('<')[0].strip(' "') or '?' for m in t})
+        st = _status(t, me)
+        print(f"  {thread_key(t)}  {len(t):3} msg  {str(sent_at(t[-1]))[:16]:18} "
+              f"{(t[0]['Subject'] or '(no subject)')[:52]}")
+        print(f"            {', '.join(who)[:80]}{('  [' + st + ']') if st else ''}")
+
+
 def cmd_threads(a):
     "List reconstructed threads, newest activity first."
     M, threads = _load(a.account, _folder(a), a.limit)
+    me = load_account(a.account).user
+    if a.needs_reply: threads = [t for t in threads if _needs_reply(t, me)]
     print(f"{len(threads)} threads from the last {a.limit} messages in {_folder(a)}\n")
-    for t in threads[:a.show]:
-        who = sorted({(m['From'] or '').split('<')[0].strip(' "') or '?' for m in t})
-        print(f"  {thread_key(t)}  {len(t):3} msg  {str(t[-1]['Date'])[:16]:18} "
-              f"{(t[0]['Subject'] or '(no subject)')[:52]}")
-        print(f"            {', '.join(who)[:96]}")
+    _print_threads(threads, a.show, me)
+    M.logout()
+
+
+def cmd_search(a):
+    "Search the mailbox server-side, then group the matches into threads."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    crit = build_search_criteria(frm=a.frm, to=a.to, subject=a.subject, text=a.text,
+                                 since=a.since, before=a.before, unread=a.unread,
+                                 flagged=a.flagged, unanswered=a.unanswered)
+    acct = load_account(a.account)
+    M = connect(acct)
+    matched = search_messages(M, _folder(a), crit, a.limit)
+    # Grouping only the matches would rebuild partial threads with keys that do not agree with
+    # `threads`. Union the matches with the recent window so threads come out whole and keyed
+    # the same way; a match older than the window still appears, just with less context.
+    by_id = {}
+    for m in fetch_recent(M, _folder(a), a.limit) + matched:
+        by_id.setdefault(message_id(m) or id(m), m)
+    hits = {message_id(m) or id(m) for m in matched}
+    threads = [t for t in group_threads(list(by_id.values()))
+               if any((message_id(m) or id(m)) in hits for m in t)]
+    threads.sort(key=lambda t: sent_at(t[-1]), reverse=True)
+    if a.needs_reply: threads = [t for t in threads if _needs_reply(t, acct.user)]
+    print(f"IMAP SEARCH {' '.join(crit)}")
+    print(f"{len(matched)} matching messages -> {len(threads)} threads in {_folder(a)}\n")
+    _print_threads(threads, a.show, acct.user)
     M.logout()
 
 
@@ -136,7 +187,19 @@ def main():
     f.set_defaults(fn=cmd_folders)
 
     t = common(sub.add_parser('threads', help=cmd_threads.__doc__))
-    t.add_argument('--show', type=int, default=25); t.set_defaults(fn=cmd_threads)
+    t.add_argument('--show', type=int, default=25)
+    t.add_argument('--needs-reply', action='store_true', help='only threads whose last message is not yours')
+    t.set_defaults(fn=cmd_threads)
+
+    q = common(sub.add_parser('search', help=cmd_search.__doc__))
+    q.add_argument('--from', dest='frm'); q.add_argument('--to'); q.add_argument('--subject')
+    q.add_argument('--text', help='substring anywhere in headers or body')
+    q.add_argument('--since', help='ISO date, inclusive'); q.add_argument('--before', help='ISO date, exclusive')
+    q.add_argument('--unread', action='store_true'); q.add_argument('--flagged', action='store_true')
+    q.add_argument('--unanswered', action='store_true')
+    q.add_argument('--needs-reply', action='store_true')
+    q.add_argument('--show', type=int, default=25)
+    q.set_defaults(fn=cmd_search)
 
     s = common(sub.add_parser('thread', help=cmd_thread.__doc__))
     s.add_argument('key'); s.add_argument('--raw', action='store_true', help='keep quoted originals')

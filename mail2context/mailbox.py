@@ -8,7 +8,10 @@ from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 
-__all__ = ['Account', 'append_draft', 'connect', 'fetch_recent', 'list_folders', 'load_account']
+from .search import annotate_flags, parse_flags
+
+__all__ = ['Account', 'append_draft', 'connect', 'fetch_recent', 'list_folders', 'load_account',
+           'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
 
@@ -57,14 +60,36 @@ def list_folders(M: imaplib.IMAP4) -> list[str]:
     return [line.decode('utf-8', 'replace').rsplit(' "/" ', 1)[-1].strip('"') for line in data if line]
 
 
+def _fetch_uids(M: imaplib.IMAP4, uids: list[bytes]) -> list[EmailMessage]:
+    "Fetch `uids` with their flags. BODY.PEEK so nothing is marked \\Seen."
+    if not uids: return []
+    _, resp = M.uid('fetch', b','.join(uids), '(FLAGS BODY.PEEK[])')
+    out = []
+    for part in resp:
+        if not isinstance(part, tuple): continue
+        msg = BytesParser(policy=policy.default).parsebytes(part[1])
+        annotate_flags(msg, parse_flags(part[0]))
+        out.append(msg)
+    return out
+
+
 def fetch_recent(M: imaplib.IMAP4, folder: str, limit: int) -> list[EmailMessage]:
-    "Fetch the newest `limit` messages from `folder`, read-only and without setting \\Seen."
+    "Fetch the newest `limit` messages from `folder`, read-only."
     M.select(_quote(folder), readonly=True)
     _, data = M.uid('search', None, 'ALL')
-    uids = data[0].split()[-limit:] if data and data[0] else []
-    if not uids: return []
-    _, resp = M.uid('fetch', b','.join(uids), '(BODY.PEEK[])')
-    return [BytesParser(policy=policy.default).parsebytes(p[1]) for p in resp if isinstance(p, tuple)]
+    return _fetch_uids(M, data[0].split()[-limit:] if data and data[0] else [])
+
+
+def search_messages(M: imaplib.IMAP4,
+                    folder: str,
+                    criteria: list[str],  # from `search.build_search_criteria`
+                    limit: int,           # cap on matches, newest kept
+                    ) -> list[EmailMessage]:
+    "Fetch the newest `limit` messages in `folder` matching IMAP SEARCH `criteria`."
+    M.select(_quote(folder), readonly=True)
+    try: _, data = M.uid('search', 'UTF-8', *criteria)
+    except imaplib.IMAP4.error: _, data = M.uid('search', None, *criteria)  # server may refuse a charset
+    return _fetch_uids(M, data[0].split()[-limit:] if data and data[0] else [])
 
 
 def append_draft(M: imaplib.IMAP4, folder: str, msg: EmailMessage) -> str:

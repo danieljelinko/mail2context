@@ -47,6 +47,11 @@ just accounts           # confirms both authenticate
 | `just accounts` | check which accounts authenticate |
 | `just folders [account]` | list mailboxes |
 | `just threads [account] [limit] [show]` | list rebuilt threads, newest first; each row starts with a **thread key** |
+| `just unread [account]` | unread threads in the inbox |
+| `just from SENDER` | threads involving a sender |
+| `just about TERM` | threads mentioning a term, headers or body |
+| `just needs-reply [since]` | threads whose last message is not yours |
+| `just search --from X --since 2026-07-01 --unread` | any combination of IMAP filters |
 | `just thread KEY` | print that thread as markdown (quotes stripped) |
 | `just thread-raw KEY` | same, quoted originals kept — use when comparing against the mail UI |
 | `just export KEY` | write the thread to a markdown file |
@@ -56,6 +61,14 @@ just accounts           # confirms both authenticate
 | `just check` | tests + lint + full-mailbox loss audit |
 
 Reads use `BODY.PEEK`, so nothing is ever marked as read. The only write is `just draft`.
+
+Search runs server-side (IMAP `SEARCH`), then the matches are unioned with the recent window
+before grouping, so you get **whole** threads keyed the same way `just threads` keys them — not
+the partial thread that grouping only the matches would produce. A match older than the window
+still appears, just with less surrounding context; raise `--limit` to widen it.
+
+Thread rows carry status markers: unread count, `awaiting you` when the last message is not
+yours, and `answered` when any message in the thread is flagged `\Answered`.
 
 A **thread key** is derived from the thread's earliest `Message-ID`, so it is stable as replies
 arrive. It is not stable if you change `--limit` so much that an older root enters the window.

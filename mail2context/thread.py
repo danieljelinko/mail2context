@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 
-__all__ = ['group_threads', 'sent_at', 'thread_key']
+__all__ = ['group_threads', 'message_id', 'sent_at', 'thread_key']
 
 _ID_RE = re.compile(r'<[^<>]+>')
 _EPOCH = datetime.fromtimestamp(0, timezone.utc)
@@ -28,6 +28,12 @@ def _find(parent: dict[str, str], k: str) -> str:
 def _union(parent: dict[str, str], a: str, b: str) -> None:
     ra, rb = _find(parent, a), _find(parent, b)
     if ra != rb: parent[rb] = ra
+
+
+def message_id(m: EmailMessage) -> str:
+    "This message's Message-ID, or '' when the header is missing or malformed."
+    found = _ID_RE.findall(m.get('Message-ID', '') or '')
+    return found[0] if found else ''
 
 
 def _own_id(m: EmailMessage, i: int) -> str:

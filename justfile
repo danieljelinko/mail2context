@@ -24,6 +24,26 @@ folders account="proton":
 threads account="proton" limit="400" show="25" folder="":
     @{{_m2c}} threads --account {{account}} --limit {{limit}} --show {{show}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}
 
+# Search server-side, then show whole threads: --from --to --subject --text --since --before --unread --flagged --unanswered --needs-reply
+search *args:
+    @{{_m2c}} search {{args}}
+
+# Unread threads in the inbox
+unread account="proton" show="25":
+    @{{_m2c}} search --unread --folder INBOX --account {{account}} --show {{show}}
+
+# Threads involving a sender
+from sender account="proton" limit="900" show="25":
+    @{{_m2c}} search --from "{{sender}}" --account {{account}} --limit {{limit}} --show {{show}}
+
+# Threads mentioning a term anywhere in headers or body
+about term account="proton" limit="900" show="25":
+    @{{_m2c}} search --text "{{term}}" --account {{account}} --limit {{limit}} --show {{show}}
+
+# Threads whose last message is not yours, since a date
+needs-reply since="" account="proton" limit="900" show="30":
+    @{{_m2c}} search --needs-reply --account {{account}} --limit {{limit}} --show {{show}} {{ if since == "" { "" } else { "--since " + since } }}
+
 # Print one thread as markdown. KEY is the short id from `just threads`.
 thread key account="proton" limit="400" folder="":
     @{{_m2c}} thread {{key}} --account {{account}} --limit {{limit}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}

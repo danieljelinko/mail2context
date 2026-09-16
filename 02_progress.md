@@ -5,6 +5,7 @@
 
 ## Next
 - Confirm a drafted reply appears correctly threaded in the Proton UI (`just draft`, untested live)
+- Attachment *contents* (currently only filenames surface)
 - Gmail app password → validate threading and stripping on a second provider
 - systemd user unit so Bridge survives closing the terminal
 
@@ -18,6 +19,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | IMAP SEARCH + flag awareness | 13 tests; live: 55 unread found, `--from barbara` returns whole 14-msg thread with matching key |
 | 2026-09-16 | `just` entry points + README | `just --list` shows 14 documented recipes |
 | 2026-09-16 | Zero-loss conversion audit | `just audit` → 0 losses across all 898 messages; found+fixed 489 URLs, 105 alts, 42 attachments |
 | 2026-09-16 | Thread → markdown renderer + export | `verify/*.md`: 14/14 messages present in both raw and stripped |
