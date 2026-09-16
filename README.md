@@ -58,8 +58,37 @@ just accounts           # confirms both authenticate
 | `just draft-preview KEY body.md` | show the reply that would be drafted, write nothing |
 | `just draft KEY body.md` | append the reply to **Drafts** — never sends |
 | `just draft-all KEY body.md` | same, but Cc everyone else in the thread |
+| `just compose TO SUBJECT body.md` | draft a NEW conversation, not a reply |
+| `just md2html body.md` | print the exact HTML that would be mailed |
+| `just md-preview body.md` | write that HTML to a file you can open in a browser |
 | `just audit [account] [limit]` | measure conversion loss; exits non-zero if anything is lost |
 | `just check` | tests + lint + full-mailbox loss audit |
+
+### Bodies are Markdown
+
+A body file is Markdown. `just draft` / `just compose` convert it to email-safe HTML with a
+deterministic renderer — **no LLM is involved**, so the same input always yields the same markup.
+Bold, italics, links, lists, headings, quotes, tables and code all work. Styling is inlined on
+each element because mail clients strip `<style>` blocks; raw HTML in the source is escaped.
+
+A single newline becomes `<br>`: in a mail body a line break is meant, unlike in a document.
+Still do not hard-wrap paragraphs — write one line per paragraph and let the client wrap.
+
+The plain-text alternative stays the Markdown source, which reads fine unrendered. Pass `--plain`
+to skip Markdown entirely (when asterisks and underscores are literal).
+
+Check the result before drafting:
+
+```bash
+just md-preview body.md      # → /tmp/m2c_preview.html, open it in a browser
+```
+
+### Signature
+
+`signature.html` and `signature.txt` at the repo root are appended to every draft — the HTML one
+verbatim, so brand styling such as the blue `4` in AI4HU survives. They were captured from real
+sent mail. Pass `--no-signature` to omit, and keep the signature out of body files or it appears
+twice.
 
 **`just` arguments are positional.** `just --list` prints signatures like
 `draft key body account="proton"` — those `name="value"` parts are *defaults*, not syntax to

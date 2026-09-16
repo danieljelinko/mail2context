@@ -12,14 +12,24 @@ from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
 from mail2context.compose import build_message, build_reply, list_participants
+from mail2context.markdown_mail import render_markdown
 from mail2context.mailbox import (append_draft, connect, fetch_recent, list_folders,
                                   load_account, search_messages)
 from mail2context.search import build_search_criteria, flags_of, is_unread
 from mail2context.render import render_thread
 from mail2context.thread import group_threads, message_id, sent_at, thread_key
 
+ROOT = Path(__file__).resolve().parent.parent
 DRAFTS   = {'proton': 'Drafts',   'gmail': '[Gmail]/Drafts'}
 ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}   # Gmail namespaces its system folders
+
+
+def _signature(a) -> tuple[str | None, str | None]:
+    "Signature text/HTML from signature.txt / signature.html at the repo root, unless disabled."
+    if getattr(a, 'no_signature', False): return None, None
+    txt, html = ROOT / 'signature.txt', ROOT / 'signature.html'
+    return (txt.read_text() if txt.exists() else None,
+            html.read_text() if html.exists() else None)
 
 
 def _folder(a) -> str:
@@ -154,7 +164,9 @@ def cmd_draft(a):
     t = _pick(threads, a.key)
     body = Path(a.file).read_text() if a.file else sys.stdin.read()
     acct = load_account(a.account)
-    msg = build_reply(t, body=body, frm=acct.user, to=a.to, reply_all=a.all)
+    sig_t, sig_h = _signature(a)
+    msg = build_reply(t, body=body, frm=acct.user, to=a.to, reply_all=a.all,
+                      markdown=not a.plain, signature_text=sig_t, signature_html=sig_h)
     addressed = {x.strip().lower() for x in f"{msg['To']},{msg['Cc'] or ''}".split(',') if x.strip()}
     omitted = [w for w in list_participants(t, acct.user) if w.lower() not in addressed]
     print(f"draft to: {msg['To']}")
@@ -173,7 +185,9 @@ def cmd_compose(a):
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
     acct = load_account(a.account)
     body = Path(a.file).read_text() if a.file else sys.stdin.read()
-    msg = build_message(to=a.to, subject=a.subject, body=body, frm=acct.user, cc=a.cc)
+    sig_t, sig_h = _signature(a)
+    msg = build_message(to=a.to, subject=a.subject, body=body, frm=acct.user, cc=a.cc,
+                        markdown=not a.plain, signature_text=sig_t, signature_html=sig_h)
     print(f"draft to: {msg['To']}")
     if msg['Cc']: print(f"cc      : {msg['Cc']}")
     print(f"subject : {msg['Subject']}\nthreaded: (new conversation)")
@@ -181,6 +195,19 @@ def cmd_compose(a):
     M = connect(acct)
     print("result  :", append_draft(M, a.drafts or DRAFTS[a.account], msg))
     M.logout()
+
+
+def cmd_md2html(a):
+    "Convert a markdown body to the exact HTML that would be mailed. No LLM involved."
+    html = render_markdown(Path(a.file).read_text())
+    _, sig_h = _signature(a)
+    if sig_h: html += f'\n{sig_h.strip()}'
+    if not a.out: print(html); return
+    out = Path(a.out)
+    out.write_text('<!doctype html><meta charset="utf-8">'
+                   f'<title>{out.name}</title>\n<body style="margin:2em; background:#fff">\n'
+                   f'{html}\n</body>\n')
+    print(f"wrote {out} — open it in a browser to see how the mail will look")
 
 
 def cmd_audit(a):
@@ -236,13 +263,22 @@ def main():
     d.add_argument('key'); d.add_argument('--file'); d.add_argument('--to'); d.add_argument('--drafts')
     d.add_argument('--dry-run', action='store_true')
     d.add_argument('--all', action='store_true', help='Cc everyone else in the thread')
+    d.add_argument('--plain', action='store_true', help='do not interpret the body as markdown')
+    d.add_argument('--no-signature', action='store_true')
     d.set_defaults(fn=cmd_draft)
 
     c = sub.add_parser('compose', help=cmd_compose.__doc__)
     c.add_argument('--to', required=True); c.add_argument('--cc')
     c.add_argument('--subject', required=True); c.add_argument('--file')
     c.add_argument('--account', default='proton'); c.add_argument('--drafts')
-    c.add_argument('--dry-run', action='store_true'); c.set_defaults(fn=cmd_compose)
+    c.add_argument('--dry-run', action='store_true')
+    c.add_argument('--plain', action='store_true', help='do not interpret the body as markdown')
+    c.add_argument('--no-signature', action='store_true')
+    c.set_defaults(fn=cmd_compose)
+
+    h = sub.add_parser('md2html', help=cmd_md2html.__doc__)
+    h.add_argument('--file', required=True); h.add_argument('--out')
+    h.add_argument('--no-signature', action='store_true'); h.set_defaults(fn=cmd_md2html)
 
     common(sub.add_parser('audit', help=cmd_audit.__doc__)).set_defaults(fn=cmd_audit)
 

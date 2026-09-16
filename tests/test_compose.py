@@ -142,8 +142,9 @@ def test_build_message_adds_an_html_alternative_so_clients_do_not_render_monospa
 
     # Then one exists, with each paragraph marked up
     assert html is not None
-    assert '<p>First para.</p>' in html.get_content()
-    assert '<p>Second para.</p>' in html.get_content()
+    assert 'First para.' in html.get_content()
+    assert 'Second para.' in html.get_content()
+    assert html.get_content().count('<p') == 2
 
 
 def test_html_alternative_keeps_deliberate_line_breaks_inside_a_paragraph():
@@ -155,7 +156,7 @@ def test_html_alternative_keeps_deliberate_line_breaks_inside_a_paragraph():
     html = m.get_body(('html',)).get_content()
 
     # Then the break is preserved rather than collapsed into one line
-    assert '<br>' in html
+    assert '<br' in html
 
 
 def test_html_alternative_escapes_markup_so_a_body_cannot_inject_html():
@@ -182,3 +183,66 @@ def test_build_reply_also_carries_an_html_alternative():
 
     # Then it too has an HTML part, so replies are not monospace either
     assert r.get_body(('html',)) is not None
+
+
+def test_build_message_renders_the_body_as_markdown_by_default():
+    # Given a body using markdown emphasis and a link
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', frm='me@x',
+                      body='Please see **the deck** at [lab](https://lab.ai4hu.org).')
+
+    # When we read the HTML part
+    html = m.get_body(('html',)).get_content()
+
+    # Then the markdown became real markup
+    assert '<strong>the deck</strong>' in html
+    assert 'href="https://lab.ai4hu.org"' in html
+
+
+def test_build_message_leaves_the_plain_part_as_the_markdown_source():
+    # Given a markdown body
+    from mail2context.compose import build_message
+    src = 'Please see **the deck**.'
+    m = build_message(to='a@x', subject='S', body=src, frm='me@x')
+
+    # When we read the plain part
+    # Then it is the markdown itself, which reads fine as plain text
+    assert m.get_body(('plain',)).get_content().strip() == src
+
+
+def test_build_message_skips_markdown_when_plain_is_requested():
+    # Given a body where asterisks are literal, not emphasis
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', frm='me@x',
+                      body='The file is named *_draft*.', markdown=False)
+
+    # When we read the HTML part
+    html = m.get_body(('html',)).get_content()
+
+    # Then nothing was interpreted as emphasis
+    assert '<em>' not in html
+
+
+def test_build_message_appends_the_signature_to_both_parts_when_given():
+    # Given a signature supplied in both plain and HTML form
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', body='Hello.', frm='me@x',
+                      signature_text='Dani JELINKO\nAI4HU',
+                      signature_html='<div><span style="color: rgb(59,131,194)">4</span></div>')
+
+    # When we read both parts
+    plain, html = m.get_body(('plain',)).get_content(), m.get_body(('html',)).get_content()
+
+    # Then each carries the signature in its own form, the HTML one keeping its styling
+    assert plain.rstrip().endswith('AI4HU')
+    assert 'color: rgb(59,131,194)' in html
+
+
+def test_build_message_adds_nothing_when_no_signature_is_given():
+    # Given no signature
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', body='Hello.', frm='me@x')
+
+    # When we read the plain part
+    # Then the body stands alone, with no stray separator appended
+    assert m.get_body(('plain',)).get_content().strip() == 'Hello.'

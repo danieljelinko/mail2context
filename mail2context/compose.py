@@ -4,6 +4,8 @@ import re
 from email.message import EmailMessage
 from email.utils import formatdate, getaddresses, make_msgid
 
+from .markdown_mail import render_markdown
+
 __all__ = ['build_message', 'build_reply', 'list_participants']
 
 # Autoresponders and forwards stack markers onto the subject; strip them all, then add one Re:.
@@ -17,10 +19,18 @@ def _as_html(body: str) -> str:
                       for p in paras)
 
 
-def _set_body(m: EmailMessage, body: str) -> None:
+def _set_body(m: EmailMessage,
+              body: str,
+              markdown: bool,
+              sig_text: str | None,   # signature for the plain part
+              sig_html: str | None,   # signature for the HTML part, styling preserved verbatim
+              ) -> None:
     "Set the plain body plus an HTML alternative, so clients do not render it monospace."
-    m.set_content(body)
-    m.add_alternative(_as_html(body), subtype='html')
+    plain = f'{body.rstrip()}\n\n{sig_text.rstrip()}\n' if sig_text else body
+    m.set_content(plain)                           # plain part stays the markdown source
+    html = render_markdown(body) if markdown else _as_html(body)
+    if sig_html: html += f'\n{sig_html.strip()}'
+    m.add_alternative(html, subtype='html')
 
 
 def _reply_subject(subj: str) -> str:
@@ -50,6 +60,9 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
                 frm: str,
                 to: str | None = None,       # override the default reply-to-last-sender
                 reply_all: bool = False,     # Cc everyone else in the thread
+                markdown: bool = True,       # render the body as markdown
+                signature_text: str | None = None,
+                signature_html: str | None = None,
                 ) -> EmailMessage:
     "Build a reply to the last message of `thread`, threaded via In-Reply-To/References."
     last = thread[-1]
@@ -71,7 +84,7 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
     if last.get('Message-ID'): m['In-Reply-To'] = last['Message-ID']
     refs = _reply_refs(last)
     if refs: m['References'] = refs
-    _set_body(m, body)
+    _set_body(m, body, markdown, signature_text, signature_html)
     return m
 
 
@@ -79,12 +92,15 @@ def build_message(to: str,        # one address, or several comma-separated
                   subject: str,
                   body: str,
                   frm: str,
-                  cc: str | None = None) -> EmailMessage:
+                  cc: str | None = None,
+                  markdown: bool = True,
+                  signature_text: str | None = None,
+                  signature_html: str | None = None) -> EmailMessage:
     "Build a new message that threads to nothing — a fresh conversation, not a reply."
     m = EmailMessage()
     m['From'], m['To'], m['Subject'] = frm, to, subject
     if cc: m['Cc'] = cc
     m['Date'] = formatdate(localtime=True)
     m['Message-ID'] = make_msgid()
-    _set_body(m, body)
+    _set_body(m, body, markdown, signature_text, signature_html)
     return m

@@ -83,6 +83,14 @@ draft key body account="proton" limit="400":
 
 # --- verification -----------------------------------------------------------
 
+# Convert a markdown body to the HTML that would be mailed (prints it)
+md2html file:
+    @{{_m2c}} md2html --file {{file}}
+
+# Render a markdown body to an HTML file you can open in a browser to check how it will look
+md-preview file out="/tmp/m2c_preview.html":
+    @{{_m2c}} md2html --file {{file}} --out {{out}}
+
 # Draft a NEW conversation (not a reply): TO, SUBJECT, BODY file
 compose to subject body account="proton":
     @{{_m2c}} compose --to "{{to}}" --subject "{{subject}}" --file {{body}} --account {{account}}
