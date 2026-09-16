@@ -63,6 +63,20 @@ just accounts           # confirms both authenticate
 | `just md-preview body.md` | write that HTML to a file you can open in a browser |
 | `just audit [account] [limit]` | measure conversion loss; exits non-zero if anything is lost |
 | `just check` | tests + lint + full-mailbox loss audit |
+| `just verify-roundtrip` | **TEMPORARY, sends mail** — see below |
+
+### Round-trip verification sends real mail (TEMPORARY)
+
+`verify-roundtrip`, `roundtrip-send`, `roundtrip-verify` and `roundtrip-break` are the only
+recipes that **send**, and they exist only for `01_plan.md` Phase 2. D-003 forbids sending;
+D-011 lifts that narrowly and temporarily, allowing delivery **solely** to `dj@ai4hu.org` and
+`daniel.jelinko@gmail.com`, enforced by a hard allowlist in `mail2context/send.py` that runs
+before any connection is opened. The allowlist is never widened — a new address is an owner
+decision, not a code edit.
+
+`just roundtrip-preview` shows what would be sent and the recipients the guard approves, and
+sends nothing. **Phase 6 deletes `send.py`, `roundtrip.py` and these recipes**, restoring
+drafts-only.
 
 ### Bodies are Markdown
 
@@ -138,7 +152,10 @@ mail2context/
   compose.py   build replies with correct In-Reply-To / References
   mailbox.py   IMAP connection, fetch, APPEND to Drafts
   audit.py     conversion-loss measurement
-scripts/m2c.py the CLI behind every just recipe
+  send.py      TEMPORARY SMTP send behind the D-011 allowlist (deleted at Phase 6)
+  roundtrip.py TEMPORARY round-trip assertions over fetched messages (deleted at Phase 6)
+scripts/m2c.py       the CLI behind every just recipe
+scripts/roundtrip.py TEMPORARY round-trip runner: SMTP, IMAP polling, ledger (deleted at Phase 6)
 ```
 
 Living documentation is in `01_plan.md`, `02_progress.md`, `03_decisions.md`, `04_learnings.md` —

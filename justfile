@@ -3,6 +3,7 @@
 # and the only write is `draft`, which appends to Drafts and never sends (D-003).
 
 _m2c := "uv run python scripts/m2c.py"
+_rt  := "uv run python scripts/roundtrip.py"
 
 # Show all available commands
 default:
@@ -118,6 +119,28 @@ lint:
 # Tests + lint + a full-mailbox loss audit
 check: test lint
     @just audit proton 900
+
+# --- round-trip verification (TEMPORARY — D-011, removed at 01_plan.md Phase 6) ---
+
+# Send a known conversation between the owner's two mailboxes and assert every Phase 2 property
+verify-roundtrip:
+    @{{_rt}} run
+
+# Show what the round-trip would send, and the recipients the D-011 guard approves. Sends nothing.
+roundtrip-preview:
+    @{{_rt}} send --run-id preview --dry-run
+
+# Send the 6-message alternating conversation only. Prints the run id to verify with.
+roundtrip-send:
+    @{{_rt}} send
+
+# Re-assert an already-sent run: one thread of six, in send order, chain intact, both sides
+roundtrip-verify run_id:
+    @{{_rt}} verify {{run_id}}
+
+# Send a 7th reply with its threading headers stripped; both sides must show the thread SPLIT
+roundtrip-break run_id:
+    @{{_rt}} break {{run_id}}
 
 # --- Proton Bridge ----------------------------------------------------------
 
