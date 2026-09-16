@@ -106,3 +106,27 @@ def test_build_reply_addresses_the_original_recipients_when_we_sent_the_last_mes
 
     # Then it goes to who we wrote to, not back to ourselves
     assert r['To'] == 'elodie@ap.fr'
+
+
+def test_build_message_carries_no_threading_headers_when_starting_a_new_conversation():
+    # Given a fresh message to a chosen recipient
+    from mail2context.compose import build_message
+    m = build_message(to='barbara@ap.fr', subject='FIPDes Day', body='Hello',
+                      frm='dj@ai4hu.org')
+
+    # When we inspect it
+    # Then it threads to nothing and keeps the subject exactly as given
+    assert m['In-Reply-To'] is None
+    assert m['References'] is None
+    assert m['Subject'] == 'FIPDes Day'
+    assert m['To'] == 'barbara@ap.fr'
+
+
+def test_build_message_sets_cc_only_when_given():
+    # Given a new message with no Cc
+    from mail2context.compose import build_message
+    m = build_message(to='a@x', subject='S', body='b', frm='me@x')
+
+    # When we inspect it
+    # Then no empty Cc header is emitted
+    assert m['Cc'] is None

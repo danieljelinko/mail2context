@@ -11,7 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
-from mail2context.compose import build_reply, list_participants
+from mail2context.compose import build_message, build_reply, list_participants
 from mail2context.mailbox import (append_draft, connect, fetch_recent, list_folders,
                                   load_account, search_messages)
 from mail2context.search import build_search_criteria, flags_of, is_unread
@@ -168,6 +168,21 @@ def cmd_draft(a):
     M.logout()
 
 
+def cmd_compose(a):
+    "Draft a NEW conversation to chosen recipients. Appends to Drafts; never sends."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    acct = load_account(a.account)
+    body = Path(a.file).read_text() if a.file else sys.stdin.read()
+    msg = build_message(to=a.to, subject=a.subject, body=body, frm=acct.user, cc=a.cc)
+    print(f"draft to: {msg['To']}")
+    if msg['Cc']: print(f"cc      : {msg['Cc']}")
+    print(f"subject : {msg['Subject']}\nthreaded: (new conversation)")
+    if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); return
+    M = connect(acct)
+    print("result  :", append_draft(M, a.drafts or DRAFTS[a.account], msg))
+    M.logout()
+
+
 def cmd_audit(a):
     "Measure what HTML→text conversion loses across the mailbox. Zero is the target."
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
@@ -222,6 +237,12 @@ def main():
     d.add_argument('--dry-run', action='store_true')
     d.add_argument('--all', action='store_true', help='Cc everyone else in the thread')
     d.set_defaults(fn=cmd_draft)
+
+    c = sub.add_parser('compose', help=cmd_compose.__doc__)
+    c.add_argument('--to', required=True); c.add_argument('--cc')
+    c.add_argument('--subject', required=True); c.add_argument('--file')
+    c.add_argument('--account', default='proton'); c.add_argument('--drafts')
+    c.add_argument('--dry-run', action='store_true'); c.set_defaults(fn=cmd_compose)
 
     common(sub.add_parser('audit', help=cmd_audit.__doc__)).set_defaults(fn=cmd_audit)
 

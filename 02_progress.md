@@ -4,7 +4,8 @@
 - Owner's manual verification of exported threads against the ProtonMail UI (`verify/`)
 
 ## Next
-- Confirm a drafted reply appears correctly threaded in the Proton UI (`just draft`, untested live)
+- Decide whether Proton replies should be composed in the UI instead, given D-009
+- Check whether Gmail preserves threading headers on APPEND (Proton does not)
 - Attachment *contents* (currently only filenames surface)
 - Gmail app password → validate threading and stripping on a second provider
 - systemd user unit so Bridge survives closing the terminal
@@ -19,6 +20,8 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | First live drafts written to Proton Drafts | `APPENDUID` returned; both read back from Drafts with correct To/Subject/body. Threading headers stripped by Proton — D-009 |
+| 2026-09-16 | `compose` for new conversations + `--to`/`--all` control | 43 tests; live new-conversation draft to Barbara |
 | 2026-09-16 | IMAP SEARCH + flag awareness | 13 tests; live: 55 unread found, `--from barbara` returns whole 14-msg thread with matching key |
 | 2026-09-16 | `just` entry points + README | `just --list` shows 14 documented recipes |
 | 2026-09-16 | Zero-loss conversion audit | `just audit` → 0 losses across all 898 messages; found+fixed 489 URLs, 105 alts, 42 attachments |

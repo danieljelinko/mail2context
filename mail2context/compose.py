@@ -3,7 +3,7 @@ import re
 from email.message import EmailMessage
 from email.utils import formatdate, getaddresses, make_msgid
 
-__all__ = ['build_reply', 'list_participants']
+__all__ = ['build_message', 'build_reply', 'list_participants']
 
 # Autoresponders and forwards stack markers onto the subject; strip them all, then add one Re:.
 _NOISE_PREFIX = re.compile(r'^\s*((re|fwd?|tr|auto|automatic reply)\s*:\s*)+', re.I)
@@ -57,5 +57,20 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
     if last.get('Message-ID'): m['In-Reply-To'] = last['Message-ID']
     refs = _reply_refs(last)
     if refs: m['References'] = refs
+    m.set_content(body)
+    return m
+
+
+def build_message(to: str,        # one address, or several comma-separated
+                  subject: str,
+                  body: str,
+                  frm: str,
+                  cc: str | None = None) -> EmailMessage:
+    "Build a new message that threads to nothing — a fresh conversation, not a reply."
+    m = EmailMessage()
+    m['From'], m['To'], m['Subject'] = frm, to, subject
+    if cc: m['Cc'] = cc
+    m['Date'] = formatdate(localtime=True)
+    m['Message-ID'] = make_msgid()
     m.set_content(body)
     return m

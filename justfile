@@ -83,6 +83,14 @@ draft key body account="proton" limit="400":
 
 # --- verification -----------------------------------------------------------
 
+# Draft a NEW conversation (not a reply): TO, SUBJECT, BODY file
+compose to subject body account="proton":
+    @{{_m2c}} compose --to "{{to}}" --subject "{{subject}}" --file {{body}} --account {{account}}
+
+# Preview a new conversation without writing it
+compose-preview to subject body account="proton":
+    @{{_m2c}} compose --to "{{to}}" --subject "{{subject}}" --file {{body}} --account {{account}} --dry-run
+
 # Full control over a draft: --to "a@x, b@y" --all --file BODY --dry-run --account --limit
 draft-args *args:
     @{{_m2c}} draft {{args}}
