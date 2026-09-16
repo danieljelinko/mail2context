@@ -1,18 +1,20 @@
 # Progress
 
 ## In flight
-- Owner's manual verification of exported threads against the ProtonMail UI (`verify/`)
+- Nothing. Build phase closed; next session starts the cross-provider round-trip plan (`01_plan.md`).
 
 ## Next
-- Decide whether Proton replies should be composed in the UI instead, given D-009
-- Check whether Gmail preserves threading headers on APPEND (Proton does not)
+- **Owner decision:** scoped send exception for test addresses (blocks round-trip testing, see
+  `01_plan.md` Phase 0). Current policy D-003 forbids sending at all.
+- Gmail app password → then Phase 1 parity checks
 - Attachment *contents* (currently only filenames surface)
 - Gmail app password → validate threading and stripping on a second provider
 - systemd user unit so Bridge survives closing the terminal
 
 ## Blocked
-- **Gmail CLI access** — needs an app password. The claude.ai connector covers in-session
-  Gmail work meanwhile, so this blocks only the CLI path and the cross-provider validation.
+- **Everything in `01_plan.md`** — needs `GMAIL_PASS`, and Phases 2-4 additionally need the
+  send-policy decision. Two owned mailboxes are what finally make thread completeness and
+  header survival *testable* rather than merely observed.
 - **Bridge survives only as long as its terminal.** Running interactively via `--cli`; closing
   that window kills IMAP. Needs the systemd user unit (offered, not yet installed).
 
