@@ -1,27 +1,33 @@
 # Progress
 
 ## In flight
-- Nothing. Build phase closed; next session starts the cross-provider round-trip plan (`01_plan.md`).
+- Nothing. **Phase 1 (Gmail parity) is complete** — see `01_plan.md`. Next session starts Phase 2.
 
 ## Next
-- **Owner decision:** scoped send exception for test addresses (blocks round-trip testing, see
-  `01_plan.md` Phase 0). Current policy D-003 forbids sending at all.
-- Gmail app password → then Phase 1 parity checks
+- **Phase 2 — the send allowlist, written test-first** (`01_plan.md` Phase 0 guard + Phase 2).
+  Nothing has been sent and no send code exists yet. `.env` has no `GMAIL_SMTP_*` entries —
+  add them before Phase 2.
 - Attachment *contents* (currently only filenames surface)
-- Gmail app password → validate threading and stripping on a second provider
-- systemd user unit so Bridge survives closing the terminal
+- Consider whether `just check` should audit Gmail too — it is Proton-only because a 900-message
+  Gmail fetch takes ~15 min against ~1 min for Bridge.
 
 ## Blocked
-- **Everything in `01_plan.md`** — needs `GMAIL_PASS`, and Phases 2-4 additionally need the
-  send-policy decision. Two owned mailboxes are what finally make thread completeness and
-  header survival *testable* rather than merely observed.
-- **Bridge survives only as long as its terminal.** Running interactively via `--cli`; closing
-  that window kills IMAP. Needs the systemd user unit (offered, not yet installed).
+- **Phases 2-5 need the send capability built** under the D-011 allowlist. That is the next
+  piece of work, not an external blocker.
+
+## Owner action outstanding
+- The FIPDes Day thank-you draft to Barbara in Proton Drafts still contains the literal
+  `[FRIEND'S NAME]`. Owner chose to edit it in the Proton UI themselves (2026-09-16).
 
 ## Done
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | Gmail parity (Phase 1) complete | `just audit gmail 900` → 0 losses, matching Proton; threads/unread/from all work on Gmail |
+| 2026-09-16 | Fixed three real losses the Gmail corpus exposed | Gmail audit 26,967 → 697 → 42 → **0**; Proton unchanged at 0 across 900. D-012, D-013 |
+| 2026-09-16 | Answered D-009 for Gmail: it preserves threading headers | Self-addressed root+reply in `[Gmail]/Drafts` returned `In-Reply-To`/`References`/`Message-ID` intact, regrouped as one thread of 2, then binned. D-014 |
+| 2026-09-16 | `just bridge-status` rewritten to log in, not grep a port | It matched Ollama's `11434` and could never report DOWN; now verified reporting up **and** down with Ollama running |
+| 2026-09-16 | Proton Bridge installed as a systemd user unit | `systemctl --user enable --now protonmail-bridge`; survives restart, reconnects from the vault in ~5 s with no 2FA prompt; linger already on |
 | 2026-09-16 | Markdown→mail converter + real signature | 59 tests; drafts re-read from Proton show sans-serif body and the blue `4` intact |
 | 2026-09-16 | Drafts render as HTML, bodies unwrapped | Re-read from Drafts: `text/html` with `<p>`/`<br>` markup; owner's screenshot drove the fix |
 | 2026-09-16 | First live drafts written to Proton Drafts | `APPENDUID` returned; both read back from Drafts with correct To/Subject/body. Threading headers stripped by Proton — D-009 |

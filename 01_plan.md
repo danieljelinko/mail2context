@@ -11,7 +11,7 @@ The previous plan (read + draft pipeline) is archived at
 ## Phase 0 — Authorisation (settled) + credential
 
 - [x] **Send capability authorised, TEMPORARILY and narrowly** (D-011, owner, 2026-09-16).
-- [ ] Gmail app password in `.env` (`GMAIL_PASS`) — blocks everything below.
+- [x] Gmail app password in `.env` (`GMAIL_PASS`) — set by the owner; both accounts authenticate.
 
 Implement the guard **test-first, before any send code exists**:
 
@@ -21,13 +21,18 @@ Implement the guard **test-first, before any send code exists**:
 - [ ] The allowlist is never widened. A new address is a new owner decision, not a code edit.
 - [ ] Every send path prints the recipients before sending
 
-## Phase 1 — Gmail parity (no sending needed)
-- [ ] `just accounts` authenticates both → verify: two OK lines
-- [ ] `just threads gmail` / `just unread gmail` / `just from X gmail`
-      → verify: Gmail's `[Gmail]/All Mail` duplication does not double-count threads
-- [ ] `just audit gmail 900` → verify: 0 losses, as Proton reports
-- [ ] Draft APPEND to `[Gmail]/Drafts` → **verify whether Gmail preserves `In-Reply-To`**
-      → this decides whether D-009 is Proton-specific or universal
+## Phase 1 — Gmail parity (no sending needed) — **DONE 2026-09-16**
+- [x] `just accounts` authenticates both → two OK lines (proton 20 folders, gmail 13)
+- [x] `just threads gmail` / `just unread gmail` / `just from X gmail`
+      → no double-counting: 400/400 distinct `Message-ID` in **both** `[Gmail]/All Mail` and
+        `INBOX`, 0 duplicates, 0 threads holding the same id twice. `cmd_search` already
+        de-duplicates its two fetches by `Message-ID`.
+- [x] `just audit gmail 900` → **0 losses**, matching Proton. Took three real defects to get
+      there: the audit compared the HTML part against plain-part output (D-012), nested anchors
+      lost their href, and anchors parsed inside an `<img>` were destroyed (D-013).
+- [x] Draft APPEND to `[Gmail]/Drafts` → **Gmail PRESERVES `In-Reply-To`, `References` and the
+      original `Message-ID`**; the pair regrouped as one thread of 2. **D-009 is Proton-specific**
+      (D-014). Probe was self-addressed and binned afterwards.
 
 ## Phase 2 — Header and threading round-trip
 - [ ] Send a known 6-message conversation alternating Proton ↔ Gmail
