@@ -1,12 +1,15 @@
 # Progress
 
 ## In flight
-- Nothing. **Phase 1 (Gmail parity) is complete** — see `01_plan.md`. Next session starts Phase 2.
+- Nothing. **Phases 0 and 1 are complete** — see `01_plan.md`. Next session starts Phase 2.
 
 ## Next
-- **Phase 2 — the send allowlist, written test-first** (`01_plan.md` Phase 0 guard + Phase 2).
-  Nothing has been sent and no send code exists yet. `.env` has no `GMAIL_SMTP_*` entries —
-  add them before Phase 2.
+- **Phase 2 — the actual send path**, behind the D-011 guard that now exists
+  (`mail2context/send.py`). Still nothing that can send: `grep -rniE "smtplib|sendmail|SMTP\("`
+  over `mail2context/ scripts/ justfile` matches nothing, and that is the state to preserve
+  until Phase 2 deliberately changes it.
+  - `.env` has **no `GMAIL_SMTP_*` entries** — add them first. Proton's SMTP is Bridge on 1025.
+  - Wire `check_recipients()` into the send path and print what it returns before sending.
 - Attachment *contents* (currently only filenames surface)
 - Consider whether `just check` should audit Gmail too — it is Proton-only because a 900-message
   Gmail fetch takes ~15 min against ~1 min for Bridge.
@@ -23,6 +26,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | D-011 send allowlist guard, written before any send code | 9 tests incl. mixed list, Bcc-hidden address, lookalike domain and empty-recipient message; `grep` confirms nothing can send |
 | 2026-09-16 | Gmail parity (Phase 1) complete | `just audit gmail 900` → 0 losses, matching Proton; threads/unread/from all work on Gmail |
 | 2026-09-16 | Fixed three real losses the Gmail corpus exposed | Gmail audit 26,967 → 697 → 42 → **0**; Proton unchanged at 0 across 900. D-012, D-013 |
 | 2026-09-16 | Answered D-009 for Gmail: it preserves threading headers | Self-addressed root+reply in `[Gmail]/Drafts` returned `In-Reply-To`/`References`/`Message-ID` intact, regrouped as one thread of 2, then binned. D-014 |

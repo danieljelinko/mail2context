@@ -13,13 +13,21 @@ The previous plan (read + draft pipeline) is archived at
 - [x] **Send capability authorised, TEMPORARILY and narrowly** (D-011, owner, 2026-09-16).
 - [x] Gmail app password in `.env` (`GMAIL_PASS`) — set by the owner; both accounts authenticate.
 
-Implement the guard **test-first, before any send code exists**:
+Implement the guard **test-first, before any send code exists** — **DONE 2026-09-16**:
 
-- [ ] `SEND_ALLOWLIST = {'dj@ai4hu.org', 'daniel.jelinko@gmail.com'}`
-- [ ] `send()` refuses if **any** To/Cc/Bcc recipient is outside it → verify: a test asserts a
-      third address raises, and that a mixed list (one allowed, one not) also raises
-- [ ] The allowlist is never widened. A new address is a new owner decision, not a code edit.
-- [ ] Every send path prints the recipients before sending
+- [x] `SEND_ALLOWLIST = {'dj@ai4hu.org', 'daniel.jelinko@gmail.com'}` in `mail2context/send.py`,
+      a module constant and **not** a parameter, so no call site can widen it. This knowingly
+      departs from the house "pass project vocabulary in as a required argument" rule; safety
+      outranks it here, and the departure is commented at the constant.
+- [x] `check_recipients()` refuses if **any** To/Cc/Bcc recipient is outside it → 9 tests: a
+      third address raises, a **mixed** list (one allowed, one not) raises, an address hidden in
+      Bcc raises, a lookalike (`dj@ai4hu.org.attacker.example`) raises, and a message addressed
+      to nobody raises rather than passing vacuously.
+- [x] The allowlist is never widened — `test_send_allowlist_holds_exactly_the_two_addresses_
+      d011_authorised` is the tripwire for a silent edit.
+- [x] `check_recipients()` *returns* the addresses so every future send path can print them
+      before sending. **No send path exists yet** — `grep -rniE "smtplib|sendmail|SMTP\(" ` over
+      `mail2context/ scripts/ justfile` matches nothing. The guard deliberately predates it.
 
 ## Phase 1 — Gmail parity (no sending needed) — **DONE 2026-09-16**
 - [x] `just accounts` authenticates both → two OK lines (proton 20 folders, gmail 13)
