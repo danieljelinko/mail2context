@@ -23,7 +23,8 @@ from mail2context.compose import build_message, build_reply
 from mail2context.mailbox import connect, load_account, search_messages
 from mail2context.render import extract_text
 from mail2context.roundtrip import (check_attachment, check_content, check_quote_stripping,
-                                    check_reply_chain, check_thread, content_body)
+                                    check_reply_chain, check_thread, content_body,
+                                    plain_part_fate)
 from mail2context.send import check_recipients, load_smtp, send_message
 from mail2context.thread import message_id, sent_at
 
@@ -314,6 +315,7 @@ def verify_content(run_id: str) -> None:
         print(f"{message_id(got)}  {got.get_content_type()}  in {got.folder}")
         if got.folder == SPAM[receiver]:
             print(f"  ! {receiver} filed it as SPAM — content is checked below regardless; the filing is a finding")
+        print(f"  text/plain part: {plain_part_fate(got, sent)}   (not a failure — see 04_learnings.md)")
         ps = [f'{sender}->{receiver}: {p}' for p in check_content(got, sent, accent_color=BLUE)]
         ps += [f'{sender}->{receiver}: {p}' for p in check_attachment(got, d['attachment'], d['sha256'])]
         for p in ps: print(f"  - {p}")

@@ -1,12 +1,13 @@
 # Progress
 
 ## In flight
-- **Phase 3 — content fidelity round-trip**, on branch `feat/content-roundtrip` (off
-  `feat/send-roundtrip`, whose disposition — merge / push / PR — is still the owner's call).
-  Built and unit-tested, **nothing sent yet**: `just content-preview` shows the rich message the
-  guard approves each way. Waiting on the owner for (a) the go-ahead to send under D-008, (b) a
-  reply from Gmail's web UI and one from Proton's to the delivered copies, (c) a screenshot of
-  each delivered copy — the blue `4` and "no monospace" are only structurally asserted here.
+- **Phase 3 — content fidelity round-trip**, run `318ecf`, branch `feat/content-roundtrip`
+  (`main` was fast-forwarded to `a3bf25a` and pushed; later commits are on the branch).
+  `just content-verify 318ecf` → **OK on both providers**: 0 audit loss, blue `4` intact, no
+  monospace body, attachment bytes equal. Findings: Gmail filed the Proton copy as **spam**;
+  Proton **regenerated** the plain part on send and **dropped** it on receipt (learnings).
+  Still open, owner at a browser: reply from Gmail's web UI (after un-spamming) and from
+  Proton's to the two copies → `just content-quotes 318ecf`; screenshots of both rendered copies.
 
 ## Next
 - **Phase 3 — content fidelity round-trip.** The send path now exists, so Phase 3 needs no new
@@ -34,6 +35,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | Phase 3 content round-trip `318ecf` passes both ways | `just content-verify 318ecf` OK: 0 loss, blue 4, proportional font, attachment sha256 equal on the Gmail and Proton copies. Gmail spam-filed it; Proton rewrote/dropped the plain part — three learnings rows |
 | 2026-09-16 | Phase 3 checkers + runner, test-first; found and fixed the missing Markdown table rule | 104 tests (was 87); `check_content`/`check_attachment`/`check_quote_stripping` each fail on their own negative fixture; `just content-preview` dry-runs both directions with the guard's approval printed first |
 | 2026-09-16 | **Phase 2 complete** — cross-provider threading round-trip | Run `91fcac`: 6 messages alternating Proton↔Gmail rebuild as **one thread of 6 in send order on both sides**, delivered `In-Reply-To`/`References` intact, `Auto:` collapsed back to `Re:` in transit, and a 7th reply with its headers removed splits 6+1 on both sides. D-015 |
 | 2026-09-16 | SMTP send path + round-trip checkers, behind the D-011 guard | 87 tests (was 76); guard opens no connection on refusal; checker's negative tests prove it can fail. `just verify-roundtrip` runs the whole thing and exits non-zero on any problem |
