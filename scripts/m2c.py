@@ -2,6 +2,7 @@
 "mail2context CLI. Read mail, rebuild threads, render context, draft replies. Never sends."
 import argparse
 import imaplib
+import re
 import ssl
 import sys
 from datetime import datetime
@@ -10,7 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
-from mail2context.compose import build_reply
+from mail2context.compose import build_reply, list_participants
 from mail2context.mailbox import (append_draft, connect, fetch_recent, list_folders,
                                   load_account, search_messages)
 from mail2context.search import build_search_criteria, flags_of, is_unread
@@ -153,8 +154,15 @@ def cmd_draft(a):
     t = _pick(threads, a.key)
     body = Path(a.file).read_text() if a.file else sys.stdin.read()
     acct = load_account(a.account)
-    msg = build_reply(t, body=body, frm=acct.user, to=a.to)
-    print(f"draft to: {msg['To']}\nsubject : {msg['Subject']}\nthreaded: {msg['In-Reply-To']}")
+    msg = build_reply(t, body=body, frm=acct.user, to=a.to, reply_all=a.all)
+    addressed = {x.strip().lower() for x in f"{msg['To']},{msg['Cc'] or ''}".split(',') if x.strip()}
+    omitted = [w for w in list_participants(t, acct.user) if w.lower() not in addressed]
+    print(f"draft to: {msg['To']}")
+    if msg['Cc']: print(f"cc      : {msg['Cc']}")
+    print(f"subject : {msg['Subject']}\nthreaded: {msg['In-Reply-To']}")
+    if omitted:
+        print(f"OMITTED : {', '.join(omitted)}")
+        print("          this thread has other participants — pass --all to copy them in")
     if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); M.logout(); return
     print("result  :", append_draft(M, a.drafts or DRAFTS[a.account], msg))
     M.logout()
@@ -211,10 +219,19 @@ def main():
 
     d = common(sub.add_parser('draft', help=cmd_draft.__doc__))
     d.add_argument('key'); d.add_argument('--file'); d.add_argument('--to'); d.add_argument('--drafts')
-    d.add_argument('--dry-run', action='store_true'); d.set_defaults(fn=cmd_draft)
+    d.add_argument('--dry-run', action='store_true')
+    d.add_argument('--all', action='store_true', help='Cc everyone else in the thread')
+    d.set_defaults(fn=cmd_draft)
 
     common(sub.add_parser('audit', help=cmd_audit.__doc__)).set_defaults(fn=cmd_audit)
 
+    # `just --list` prints signatures like `draft key body account="proton"`, which read as if
+    # name=value were valid. just arguments are positional, so those arrive here as literals.
+    for arg in sys.argv[1:]:
+        if re.fullmatch(r'(account|limit|show|folder|out|since|body|key|sender|term)=.*', arg):
+            p.error(f"got the literal {arg!r} — `just` arguments are POSITIONAL, not name=value.\n"
+                    f"       `just --list` shows defaults, not syntax to copy.\n"
+                    f"       Try: just draft <KEY> <BODY-FILE>   (then optionally <account> <limit>)")
     a = p.parse_args(); a.fn(a)
 
 

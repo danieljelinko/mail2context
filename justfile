@@ -65,11 +65,19 @@ export-both key account="proton" limit="400": (export key account limit) (export
 
 # --- writing (drafts only — nothing is ever sent) ---------------------------
 
-# Preview a reply draft without writing it. BODY is a file path.
+# Preview a reply draft without writing it. Args are POSITIONAL: KEY then BODY file.
 draft-preview key body account="proton" limit="400":
     @{{_m2c}} draft {{key}} --file {{body}} --account {{account}} --limit {{limit}} --dry-run
 
-# Create a reply draft in the Drafts folder. Review and send from your mail client.
+# Preview a reply-all draft (Cc everyone else in the thread)
+draft-preview-all key body account="proton" limit="400":
+    @{{_m2c}} draft {{key}} --file {{body}} --account {{account}} --limit {{limit}} --all --dry-run
+
+# Create a reply-all draft in Drafts. Review and send from your mail client.
+draft-all key body account="proton" limit="400":
+    @{{_m2c}} draft {{key}} --file {{body}} --account {{account}} --limit {{limit}} --all
+
+# Create a reply draft in Drafts. Args are POSITIONAL: KEY then BODY file. Never sends.
 draft key body account="proton" limit="400":
     @{{_m2c}} draft {{key}} --file {{body}} --account {{account}} --limit {{limit}}
 

@@ -57,10 +57,19 @@ just accounts           # confirms both authenticate
 | `just export KEY` | write the thread to a markdown file |
 | `just draft-preview KEY body.md` | show the reply that would be drafted, write nothing |
 | `just draft KEY body.md` | append the reply to **Drafts** — never sends |
+| `just draft-all KEY body.md` | same, but Cc everyone else in the thread |
 | `just audit [account] [limit]` | measure conversion loss; exits non-zero if anything is lost |
 | `just check` | tests + lint + full-mailbox loss audit |
 
-Reads use `BODY.PEEK`, so nothing is ever marked as read. The only write is `just draft`.
+**`just` arguments are positional.** `just --list` prints signatures like
+`draft key body account="proton"` — those `name="value"` parts are *defaults*, not syntax to
+type. Write `just draft 9cb987c4 reply.md`, optionally `just draft 9cb987c4 reply.md gmail 900`.
+
+Reads use `BODY.PEEK`, so nothing is ever marked as read. The only writes are `just draft` and
+`just draft-all`.
+
+A reply goes to the **last sender** only. Any other participants are listed as `OMITTED` in the
+preview — check that line before drafting, and use `draft-all` to copy them in.
 
 Search runs server-side (IMAP `SEARCH`), then the matches are unioned with the recent window
 before grouping, so you get **whole** threads keyed the same way `just threads` keys them — not
