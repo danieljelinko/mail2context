@@ -20,7 +20,11 @@ dev = [
     "jupyter>=1.0.0",
     "notebook>=6.0.0",
     "pytest>=8.3.5",
+    "ruff>=0.16.0",
 ]
 
 [tool.setuptools]
 packages = ["mail2context"]
+
+[tool.ruff.lint]
+ignore = ["I001", "ISC004", "FURB167"]   # fight house style; see 1006_ruff_linting rule
