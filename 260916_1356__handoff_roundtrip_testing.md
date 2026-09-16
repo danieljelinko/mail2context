@@ -40,11 +40,12 @@ Proton works end to end, verified against real mail — not fixtures:
 
 1. **`GMAIL_PASS`** — owner generates a Google app password. Without it every Gmail command
    refuses.
-2. **The send policy.** `D-003` forbids sending: drafts only. Round-trip testing requires real
-   mail to travel between the two accounts. `01_plan.md` Phase 0 proposes a scoped exception —
-   a hard allowlist of exactly the two test addresses, enforced in code, with a test asserting
-   any other recipient is refused. **This is the owner's decision. Do not send anything until
-   they have said yes, and do not widen the allowlist.**
+2. **The send policy — read D-011 carefully.** The owner has authorised sending, but
+   **temporarily and only** to `dj@ai4hu.org` and `daniel.jelinko@gmail.com`. Enforce it with a
+   hard allowlist in code, written test-first, refusing any message with *any* recipient outside
+   it. **Never widen the allowlist** — a new address is a new owner decision, not a code edit.
+   **The capability is removed once the suite passes** (`01_plan.md` Phase 6); leaving it in
+   place violates D-011.
 
 ## Traps that already cost time
 
@@ -65,7 +66,7 @@ Proton works end to end, verified against real mail — not fixtures:
 
 ## Rules to carry forward
 
-- **Never send** outside the agreed allowlist, and never without the owner's yes.
+- **Never send** outside the D-011 allowlist, and remove the capability entirely at Phase 6.
 - **Never commit mailbox content.** Exports go to `verify/`, gitignored.
 - Before drafting, **always ask** who receives it and whether it continues the thread or starts a
   new conversation (D-008). Show the `draft-preview` To/Cc/subject/OMITTED block first.

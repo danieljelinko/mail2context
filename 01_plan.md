@@ -8,13 +8,18 @@ decidable because we control both ends.
 The previous plan (read + draft pipeline) is archived at
 `plan/archive/260916__build_read_draft_pipeline.md`.
 
-## Phase 0 — Decision required before any of this (owner)
+## Phase 0 — Authorisation (settled) + credential
 
-- [ ] **D-003 says drafts only, never send. Round-trip testing requires sending.**
-      Proposed scoped exception: sending is permitted *only* to addresses on a hard allowlist
-      containing exactly our two test addresses, enforced in code and covered by a test that
-      asserts any other recipient is refused. Without this, Phases 2-4 cannot run.
+- [x] **Send capability authorised, TEMPORARILY and narrowly** (D-011, owner, 2026-09-16).
 - [ ] Gmail app password in `.env` (`GMAIL_PASS`) — blocks everything below.
+
+Implement the guard **test-first, before any send code exists**:
+
+- [ ] `SEND_ALLOWLIST = {'dj@ai4hu.org', 'daniel.jelinko@gmail.com'}`
+- [ ] `send()` refuses if **any** To/Cc/Bcc recipient is outside it → verify: a test asserts a
+      third address raises, and that a mixed list (one allowed, one not) also raises
+- [ ] The allowlist is never widened. A new address is a new owner decision, not a code edit.
+- [ ] Every send path prints the recipients before sending
 
 ## Phase 1 — Gmail parity (no sending needed)
 - [ ] `just accounts` authenticates both → verify: two OK lines
@@ -55,7 +60,23 @@ The previous plan (read + draft pipeline) is archived at
       threading in the client's own conversation view
 - [ ] Bind into an evidence README with a coverage matrix — no silent gaps
 
+## Phase 6 — REMOVE the send capability (not optional)
+
+The authorisation in D-011 is temporary. When Phases 1-5 pass:
+
+- [ ] Delete the send code path, the allowlist and its CLI/just entry points
+- [ ] Keep the round-trip tests that do not require sending; mark the rest skipped with a note
+      pointing at D-011
+- [ ] `grep -rn "smtp\|send" mail2context/ scripts/ justfile` → verify: nothing can send
+- [ ] Restore the `mail` skill's unqualified "never send" wording
+- [ ] Append a decision row recording that D-011 has been retired, with the date
+- [ ] Tell the owner it is done
+
+**Leaving send enabled after validation violates D-011.** Treat this phase as part of the work,
+not cleanup to do later.
+
 ## Success criteria
 
 A single `just verify-roundtrip` that constructs the conversation, asserts every property above,
 and exits non-zero on any failure. Screenshots as evidence for what only a human eye can judge.
+Then Phase 6, and the tool is back to drafts-only.
