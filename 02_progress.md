@@ -1,11 +1,12 @@
 # Progress
 
 ## In flight
-- Phase 3 context rendering — extraction + quote stripping done; thread → markdown next
+- Owner's manual verification of exported threads against the ProtonMail UI (`verify/`)
 
 ## Next
-- Phase 4 draft composition via IMAP APPEND to `Drafts`
-- Gmail app password → validate the same code path on a second provider
+- Confirm a drafted reply appears correctly threaded in the Proton UI (`just draft`, untested live)
+- Gmail app password → validate threading and stripping on a second provider
+- systemd user unit so Bridge survives closing the terminal
 
 ## Blocked
 - **Gmail CLI access** — needs an app password. The claude.ai connector covers in-session
@@ -17,6 +18,10 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | `just` entry points + README | `just --list` shows 14 documented recipes |
+| 2026-09-16 | Zero-loss conversion audit | `just audit` → 0 losses across all 898 messages; found+fixed 489 URLs, 105 alts, 42 attachments |
+| 2026-09-16 | Thread → markdown renderer + export | `verify/*.md`: 14/14 messages present in both raw and stripped |
+| 2026-09-16 | Reply composition with correct threading headers | 2 tests; live draft still unverified |
 | 2026-09-16 | Body extraction + quote stripping | 9 tests green; on 400 real msgs 41% of chars removed, residual quotes 1/400 |
 | 2026-09-16 | Validate threading on real Proton mail | 400 msgs → 262 threads, 105 multi-message, 0 mis-ordered in UTC; D-006 |
 | 2026-09-16 | Authenticate to Bridge IMAP as `dj@ai4hu.org` | LOGIN OK; 84 in INBOX; labels listed as `Labels/*` |
