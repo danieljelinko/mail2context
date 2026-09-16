@@ -11,7 +11,6 @@ requires-python=">=3.10"
 dependencies = [
     "fastcore>=1.5.29",
     "python-dotenv>=1.0.1",
-    "solvemail",
 ]
 
 [dependency-groups]
@@ -25,6 +24,3 @@ dev = [
 
 [tool.setuptools]
 packages = ["mail2context"]
-
-[tool.uv.sources]
-solvemail = { git = "https://github.com/AnswerDotAI/solvemail" }
