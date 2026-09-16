@@ -142,6 +142,22 @@ roundtrip-verify run_id:
 roundtrip-break run_id:
     @{{_rt}} break {{run_id}}
 
+# Phase 3: show the rich-content message (every Markdown feature, accents, signature, attachment) each way. Sends nothing.
+content-preview:
+    @{{_rt}} content --run-id preview --dry-run
+
+# Phase 3: send the rich-content message Proton->Gmail and Gmail->Proton. Prints the run id.
+content-send:
+    @{{_rt}} content
+
+# Phase 3: assert each delivered copy reads as sent — 0 loss, blue 4 intact, no monospace body, attachment bytes equal
+content-verify run_id:
+    @{{_rt}} content-verify {{run_id}}
+
+# Phase 3: assert a REAL Gmail/Proton web-UI reply to each copy has its quote stripped (needs the owner's replies)
+content-quotes run_id:
+    @{{_rt}} content-quotes {{run_id}}
+
 # --- Proton Bridge ----------------------------------------------------------
 
 # Is Bridge up and serving IMAP? Logs in — a listening port is not evidence.

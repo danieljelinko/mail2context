@@ -1,30 +1,41 @@
 #!/usr/bin/env python
 """TEMPORARY cross-provider round-trip runner (D-011). Deleted at `01_plan.md` Phase 6.
 
-Sends a known conversation alternating Proton and Gmail, then asserts the tool rebuilds it.
+Phase 2: sends a known conversation alternating Proton and Gmail, then asserts the tool rebuilds it.
+Phase 3: sends one rich-content message each way and asserts the delivered copies read as sent.
 The assertions themselves live in `mail2context/roundtrip.py` and are unit-tested; this file is
 the I/O around them — SMTP, IMAP polling, and a ledger under verify/ (gitignored).
 """
 import argparse
+import re
+import hashlib
 import json
 import secrets
 import time
 from datetime import datetime, timezone
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from mail2context.compose import build_message, build_reply
 from mail2context.mailbox import connect, load_account, search_messages
-from mail2context.roundtrip import check_reply_chain, check_thread
+from mail2context.render import extract_text
+from mail2context.roundtrip import (check_attachment, check_content, check_quote_stripping,
+                                    check_reply_chain, check_thread, content_body)
 from mail2context.send import check_recipients, load_smtp, send_message
 from mail2context.thread import message_id, sent_at
+
+_IDS = re.compile(r'<[^<>]+>')
 
 ROOT = Path(__file__).resolve().parent.parent
 ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}
 ADDR = {'proton': 'dj@ai4hu.org', 'gmail': 'daniel.jelinko@gmail.com'}
 OTHER = {'proton': 'gmail', 'gmail': 'proton'}
 STEPS = 6
+BLUE = 'rgb(59, 131, 194)'                       # the signature's 4, from signature.html
+QUOTE_CLASS = {'gmail': 'gmail_quote', 'proton': 'protonmail_quote'}   # what each web UI wraps a reply's quote in
 
 
 def _subject(run_id: str) -> str: return f'm2c roundtrip {run_id}'
@@ -185,6 +196,137 @@ def break_chain(run_id: str, dry_run: bool) -> None:
     _verdict(problems, 'deliberate chain break')
 
 
+# --- Phase 3: content fidelity ------------------------------------------------------------
+
+def _csubject(run_id: str) -> str: return f'm2c content {run_id}'
+def _ctoken(run_id: str, sender: str) -> str: return f'm2c-ct-{run_id}-from-{sender}'
+def _cledger(run_id: str) -> Path: return ROOT / 'verify' / f'content_{run_id}.json'
+def _csent_path(run_id: str, sender: str) -> Path: return ROOT / 'verify' / f'content_{run_id}_from_{sender}.eml'
+
+
+def _cmarkers(run_id: str, sender: str) -> list[str]:
+    "Text only the rich body carries, so a quote of it is recognisable and its removal provable."
+    return [_ctoken(run_id, sender), 'cellule-A1', 'Rapport de fidélité du contenu']
+
+
+def _cattachment(run_id: str, sender: str) -> tuple[str, bytes]:
+    "A deterministic UTF-8 text attachment with accents; base64 on the wire, so bytes must match exactly."
+    name = f'm2c-content-{run_id}-from-{sender}.txt'
+    return name, (f'Pièce jointe {name}\n' + 'Ligne de vérification — œuvre, çà et là.\n' * 50).encode()
+
+
+def _cfetch(account: str, run_id: str) -> list:
+    "Every message of this content run visible to `account`, by server-side subject search."
+    M = connect(load_account(account))
+    msgs = search_messages(M, ALL_MAIL[account], ['SUBJECT', f'"{_csubject(run_id)}"'], 50)
+    M.logout()
+    return msgs
+
+
+def _cdelivered(msgs: list, run_id: str, sender: str):
+    "The rich message `sender` sent, among `msgs`: carries its token AND was authored by `sender`."
+    for m in msgs:
+        if ADDR[sender] in (m['From'] or '') and _ctoken(run_id, sender) in extract_text(m, strip_quotes=False):
+            return m
+    return None
+
+
+def _cwait(account: str, run_id: str, sender: str, timeout: float, interval: float = 6):
+    "Poll `account` until the rich message from `sender` is visible there."
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if (m := _cdelivered(_cfetch(account, run_id), run_id, sender)) is not None: return m
+        time.sleep(interval)
+    raise SystemExit(f"content message from {sender} never reached {account} within {timeout:.0f}s")
+
+
+def _csend(run_id: str, sender: str, dry_run: bool) -> dict | None:
+    "Build, guard-check and send the rich message from `sender` to the other mailbox, with its attachment."
+    sig_t, sig_h = _signature()
+    msg = build_message(to=ADDR[OTHER[sender]], subject=_csubject(run_id),
+                        body=content_body(_ctoken(run_id, sender)), frm=ADDR[sender],
+                        signature_text=sig_t, signature_html=sig_h)
+    name, data = _cattachment(run_id, sender)
+    msg.add_attachment(data, maintype='text', subtype='plain', filename=name)
+    digest = hashlib.sha256(data).hexdigest()
+    approved = check_recipients(msg)              # printed BEFORE anything leaves the machine
+    print(f"  {sender:6} -> {', '.join(approved)}   (new conversation)")
+    print(f"           subject    : {msg['Subject']}")
+    print(f"           structure  : {msg.get_content_type()} "
+          f"[{', '.join(p.get_content_type() for p in msg.walk() if not p.is_multipart())}]")
+    print(f"           attachment : {name} ({len(data)} bytes, sha256 {digest[:12]}…)")
+    if dry_run: print("           DRY RUN — not sent"); return None
+    _csent_path(run_id, sender).parent.mkdir(parents=True, exist_ok=True)
+    _csent_path(run_id, sender).write_bytes(msg.as_bytes())    # what verify compares against
+    send_message(load_smtp(sender), msg)
+    print(f"           sent, waiting for it to reach {OTHER[sender]} ...", flush=True)
+    got = _cwait(OTHER[sender], run_id, sender, timeout=420)
+    print(f"           delivered as {message_id(got)}\n", flush=True)
+    return {'sender': sender, 'receiver': OTHER[sender], 'delivered_message_id': message_id(got),
+            'attachment': name, 'sha256': digest, 'size': len(data)}
+
+
+def send_content(run_id: str, dry_run: bool) -> str:
+    "Send the rich-content message in BOTH directions, so each provider stores a delivered copy."
+    print(f"run {run_id} — subject {_csubject(run_id)!r}\n")
+    dirs = [d for sender in ('proton', 'gmail') if (d := _csend(run_id, sender, dry_run))]
+    if dry_run: return run_id
+    led = _cledger(run_id)
+    led.write_text(json.dumps({'run_id': run_id, 'sent_at': datetime.now().astimezone().isoformat(),
+                               'directions': dirs}, indent=2))
+    print(f"ledger {led}\nnow run: just content-verify {run_id}")
+    return run_id
+
+
+def _cload(run_id: str) -> dict:
+    led = _cledger(run_id)
+    if not led.exists(): raise SystemExit(f"no ledger for run {run_id}: {led}")
+    return json.loads(led.read_text())
+
+
+def verify_content(run_id: str) -> None:
+    "Assert each delivered copy reads as sent: 0 loss, blue 4 intact, no monospace body, attachment bytes equal."
+    problems = []
+    for d in _cload(run_id)['directions']:
+        sender, receiver = d['sender'], d['receiver']
+        sent = BytesParser(policy=policy.default).parsebytes(_csent_path(run_id, sender).read_bytes())
+        got = _cdelivered(_cfetch(receiver, run_id), run_id, sender)
+        print(f"\n{sender} -> {receiver}: ", end='')
+        if got is None: problems.append(f'{sender}->{receiver}: rich message not found'); print('NOT FOUND'); continue
+        print(f"{message_id(got)}  {got.get_content_type()}")
+        ps = [f'{sender}->{receiver}: {p}' for p in check_content(got, sent, accent_color=BLUE)]
+        ps += [f'{sender}->{receiver}: {p}' for p in check_attachment(got, d['attachment'], d['sha256'])]
+        for p in ps: print(f"  - {p}")
+        if not ps: print("  content, signature colour, proportional font, attachment: all as sent")
+        problems += ps
+    _verdict(problems, 'content round-trip')
+
+
+def verify_quotes(run_id: str) -> None:
+    "Assert a REAL web-UI reply to each delivered copy has its quote stripped and the reply kept."
+    problems, pending = [], []
+    for d in _cload(run_id)['directions']:
+        sender, receiver, mid = d['sender'], d['receiver'], d['delivered_message_id']
+        # The owner replies from the RECEIVER's web UI; the reply lands in the SENDER's mailbox.
+        replies = [m for m in _cfetch(sender, run_id)
+                   if mid in _IDS.findall((m['In-Reply-To'] or '') + ' ' + (m['References'] or ''))
+                   and message_id(m) != mid]
+        print(f"\n{receiver} web-UI reply to the {sender} message: {len(replies)} found")
+        if not replies: pending.append(f'{receiver}: reply from its web UI to {_csubject(run_id)!r}'); continue
+        for r in sorted(replies, key=sent_at):
+            ps = check_quote_stripping(r, _cmarkers(run_id, sender), QUOTE_CLASS[receiver])
+            print(f"  {message_id(r)}  from {r['From']}")
+            print("  stripped text the agent would read:")
+            for line in extract_text(r, strip_quotes=True).splitlines(): print(f"    | {line}")
+            for p in ps: print(f"  - {p}")
+            problems += [f'{receiver} reply: {p}' for p in ps]
+    if pending:
+        print("\nSTILL NEEDED from the owner, at a browser:")
+        for p in pending: print(f"  - {p}")
+        raise SystemExit(2)
+    _verdict(problems, 'real quote-block stripping')
+
+
 def _verdict(problems: list[str], what: str) -> None:
     "Print the verdict and exit non-zero on any problem."
     if problems:
@@ -197,6 +339,9 @@ def _verdict(problems: list[str], what: str) -> None:
 def cmd_send(a):  send_conversation(a.run_id or secrets.token_hex(3), a.dry_run)
 def cmd_verify(a): verify_conversation(a.run_id)
 def cmd_break(a):  break_chain(a.run_id, a.dry_run)
+def cmd_content(a): send_content(a.run_id or secrets.token_hex(3), a.dry_run)
+def cmd_content_verify(a): verify_content(a.run_id)
+def cmd_content_quotes(a): verify_quotes(a.run_id)
 
 
 def cmd_run(a):
@@ -219,6 +364,13 @@ def main():
     b = sub.add_parser('break', help=cmd_break.__doc__)
     b.add_argument('run_id'); b.add_argument('--dry-run', action='store_true')
     b.set_defaults(fn=cmd_break)
+    c = sub.add_parser('content', help=send_content.__doc__)
+    c.add_argument('--run-id'); c.add_argument('--dry-run', action='store_true')
+    c.set_defaults(fn=cmd_content)
+    cv = sub.add_parser('content-verify', help=verify_content.__doc__)
+    cv.add_argument('run_id'); cv.set_defaults(fn=cmd_content_verify)
+    cq = sub.add_parser('content-quotes', help=verify_quotes.__doc__)
+    cq.add_argument('run_id'); cq.set_defaults(fn=cmd_content_quotes)
     r = sub.add_parser('run', help=cmd_run.__doc__)
     r.add_argument('--run-id'); r.set_defaults(fn=cmd_run)
     a = p.parse_args(); a.fn(a)
