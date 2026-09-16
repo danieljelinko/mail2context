@@ -42,15 +42,18 @@ Implement the guard **test-first, before any send code exists** — **DONE 2026-
       original `Message-ID`**; the pair regrouped as one thread of 2. **D-009 is Proton-specific**
       (D-014). Probe was self-addressed and binned afterwards.
 
-## Phase 2 — Header and threading round-trip
-- [ ] Send a known 6-message conversation alternating Proton ↔ Gmail
-- [ ] Fetch from both sides; assert `group_threads` rebuilds **one** thread of exactly 6,
-      in the order sent → the completeness check that was impossible before
-- [ ] Assert `In-Reply-To`/`References` survive an actual send (D-009 is about *drafts*;
-      sent mail is untested)
-- [ ] Break the chain deliberately: strip `References` from one reply and confirm the tool
-      splits the thread — proving the known blind spot behaves as documented
-- [ ] Subject prefixes as really generated (`Re:`, `Fwd:`, `Auto:`) rather than fixtures
+## Phase 2 — Header and threading round-trip — **DONE 2026-09-16** (run `91fcac`)
+- [x] Send a known 6-message conversation alternating Proton ↔ Gmail — `just verify-roundtrip`,
+      each reply built by the production `build_reply` from the copy that actually arrived
+- [x] Fetch from both sides; assert `group_threads` rebuilds **one** thread of exactly 6,
+      in the order sent → **passes identically on Proton and Gmail**
+- [x] Assert `In-Reply-To`/`References` survive an actual send → **they do, on both providers**.
+      D-009's stripping is specific to draft APPEND, not to Proton mail generally (D-015)
+- [x] Break the chain deliberately → the 7th reply, sent with `In-Reply-To`/`References`
+      removed, splits into 6 + 1 on **both** sides. Note it must be the LAST message: a broken
+      middle reply is healed by later replies' `References` (`04_learnings.md`)
+- [x] Subject prefixes as really generated: five real `Re:` prefixes, and an `Auto:` stacked at
+      step 4 that step 5's `_reply_subject` collapsed back to a single `Re:` in transit
 
 ## Phase 3 — Content fidelity round-trip
 - [ ] Send a message exercising every Markdown feature + accents + the signature

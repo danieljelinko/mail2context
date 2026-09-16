@@ -1,22 +1,25 @@
 # Progress
 
 ## In flight
-- Nothing. **Phases 0 and 1 are complete** — see `01_plan.md`. Next session starts Phase 2.
+- Nothing. **Phases 0, 1 and 2 are complete** — see `01_plan.md`. Next session starts Phase 3.
 
 ## Next
-- **Phase 2 — the actual send path**, behind the D-011 guard that now exists
-  (`mail2context/send.py`). Still nothing that can send: `grep -rniE "smtplib|sendmail|SMTP\("`
-  over `mail2context/ scripts/ justfile` matches nothing, and that is the state to preserve
-  until Phase 2 deliberately changes it.
-  - `.env` has **no `GMAIL_SMTP_*` entries** — add them first. Proton's SMTP is Bridge on 1025.
-  - Wire `check_recipients()` into the send path and print what it returns before sending.
+- **Phase 3 — content fidelity round-trip.** The send path now exists, so Phase 3 needs no new
+  plumbing: send a message exercising every Markdown feature, accents and the signature, then
+  audit the delivered copy. The two items it cannot reach by header inspection are a **real**
+  `gmail_quote` block (reply from Gmail's web UI) and a real `protonmail_quote` (Proton's UI) —
+  both need the owner at a browser.
+- **The send capability is now LIVE** and must be removed at Phase 6. `mail2context/send.py`,
+  `mail2context/roundtrip.py`, `scripts/roundtrip.py` and the five `roundtrip*` just recipes are
+  all marked TEMPORARY in their own docstrings. Run `just roundtrip-preview` to see the guard
+  refuse-or-approve without sending.
 - Attachment *contents* (currently only filenames surface)
 - Consider whether `just check` should audit Gmail too — it is Proton-only because a 900-message
   Gmail fetch takes ~15 min against ~1 min for Bridge.
 
 ## Blocked
-- **Phases 2-5 need the send capability built** under the D-011 allowlist. That is the next
-  piece of work, not an external blocker.
+- Nothing. Phases 3-5 can proceed on the send path built in Phase 2; Phase 3's quote-block items
+  need the owner to reply from each provider's web UI.
 
 ## Owner action outstanding
 - The FIPDes Day thank-you draft to Barbara in Proton Drafts still contains the literal
@@ -26,6 +29,9 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | **Phase 2 complete** — cross-provider threading round-trip | Run `91fcac`: 6 messages alternating Proton↔Gmail rebuild as **one thread of 6 in send order on both sides**, delivered `In-Reply-To`/`References` intact, `Auto:` collapsed back to `Re:` in transit, and a 7th reply with its headers removed splits 6+1 on both sides. D-015 |
+| 2026-09-16 | SMTP send path + round-trip checkers, behind the D-011 guard | 87 tests (was 76); guard opens no connection on refusal; checker's negative tests prove it can fail. `just verify-roundtrip` runs the whole thing and exits non-zero on any problem |
+| 2026-09-16 | Merged the Gmail-parity branch to `main` and pushed | `main` fast-forwarded to `a7ea2a8` and pushed to origin; Phase 2 work on `feat/send-roundtrip` |
 | 2026-09-16 | Handoff + launch prompt for the Phase 2 session | `260916_1711__handoff_phase2_send.md`, `260916_1711__launch_prompt_phase2.md`; prior handoff moved to `archive/` |
 | 2026-09-16 | D-011 send allowlist guard, written before any send code | 9 tests incl. mixed list, Bcc-hidden address, lookalike domain and empty-recipient message; `grep` confirms nothing can send |
 | 2026-09-16 | Gmail parity (Phase 1) complete | `just audit gmail 900` → 0 losses, matching Proton; threads/unread/from all work on Gmail |
