@@ -10,8 +10,8 @@ from email.parser import BytesParser
 
 from .search import annotate_flags, parse_flags
 
-__all__ = ['Account', 'append_draft', 'connect', 'fetch_recent', 'list_folders', 'load_account',
-           'search_messages']
+__all__ = ['Account', 'append_draft', 'connect', 'fetch_recent', 'list_folders', 'list_uids',
+           'load_account', 'move_message', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
 
@@ -97,3 +97,17 @@ def append_draft(M: imaplib.IMAP4, folder: str, msg: EmailMessage) -> str:
     typ, data = M.append(_quote(folder), '\\Draft',
                          imaplib.Time2Internaldate(time.time()), msg.as_bytes())
     return f"{typ} {data[0].decode('utf-8', 'replace') if data and data[0] else ''}"
+
+
+def list_uids(M: imaplib.IMAP4, folder: str) -> list[bytes]:
+    "UIDs in `folder`, oldest first."
+    M.select(_quote(folder), readonly=True)
+    _, data = M.uid('search', None, 'ALL')
+    return data[0].split() if data and data[0] else []
+
+
+def move_message(M: imaplib.IMAP4, folder: str, uid: bytes, dest: str) -> str:
+    "Move one message to `dest`. Used to bin a draft — recoverable, unlike EXPUNGE."
+    M.select(_quote(folder))                       # not readonly: MOVE mutates
+    typ, _ = M.uid("move", uid, _quote(dest))
+    return f"{typ} {uid.decode()} -> {dest}"

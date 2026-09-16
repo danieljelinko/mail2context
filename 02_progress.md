@@ -20,6 +20,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | Drafts render as HTML, bodies unwrapped | Re-read from Drafts: `text/html` with `<p>`/`<br>` markup; owner's screenshot drove the fix |
 | 2026-09-16 | First live drafts written to Proton Drafts | `APPENDUID` returned; both read back from Drafts with correct To/Subject/body. Threading headers stripped by Proton — D-009 |
 | 2026-09-16 | `compose` for new conversations + `--to`/`--all` control | 43 tests; live new-conversation draft to Barbara |
 | 2026-09-16 | IMAP SEARCH + flag awareness | 13 tests; live: 55 unread found, `--from barbara` returns whole 14-msg thread with matching key |
