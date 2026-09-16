@@ -2,7 +2,9 @@ from email.message import EmailMessage
 
 import pytest
 
-from mail2context.send import SEND_ALLOWLIST, SendRefused, check_recipients
+import mail2context.send
+from mail2context.send import (SEND_ALLOWLIST, SendRefused, SmtpAccount, check_recipients,
+                               load_smtp, send_message)
 
 OWNER_PROTON, OWNER_GMAIL = 'dj@ai4hu.org', 'daniel.jelinko@gmail.com'
 
@@ -104,3 +106,66 @@ def test_send_allowlist_holds_exactly_the_two_addresses_d011_authorised():
     # Then it names only the owner's two mailboxes — widening it is an owner decision, not a code
     # edit, so this test is the tripwire for a silent change
     assert set(SEND_ALLOWLIST) == {OWNER_PROTON, OWNER_GMAIL}
+
+
+def test_load_smtp_reads_host_port_and_credentials_from_the_account_prefix(monkeypatch):
+    # Given the four env vars an account's SMTP submission needs
+    for k, v in {'GMAIL_SMTP_HOST': 'smtp.example.org', 'GMAIL_SMTP_PORT': '587',
+                 'GMAIL_USER': 'u@example.org', 'GMAIL_PASS': 'app-password'}.items():
+        monkeypatch.setenv(k, v)
+
+    # When we load the gmail SMTP account
+    acct = load_smtp('gmail')
+
+    # Then host, port, user and password all come from the <NAME>_ prefix, port as an int
+    assert (acct.host, acct.port, acct.user, acct.password) == (
+        'smtp.example.org', 587, 'u@example.org', 'app-password')
+
+
+@pytest.fixture
+def smtp_sessions(monkeypatch):
+    "Factory-free boundary stub: replaces smtplib.SMTP and yields the sessions it opened."
+    sessions = []
+
+    class _Recorder:
+        def __init__(self, host, port, timeout=None):
+            self.host, self.port, self.sent, self.logged_in_as = host, port, [], None
+            sessions.append(self)
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+        def starttls(self, context=None): self.tls_context = context
+        def login(self, user, password): self.logged_in_as = user
+        def send_message(self, msg, from_addr=None, to_addrs=None):
+            self.sent.append((from_addr, list(to_addrs or []), msg))
+
+    monkeypatch.setattr(mail2context.send.smtplib, 'SMTP', _Recorder)
+    return sessions
+
+
+def an_account() -> SmtpAccount:
+    "An SMTP account the recorder can accept; no connection is ever made to it."
+    return SmtpAccount('smtp.example.org', 587, OWNER_GMAIL, 'app-password')
+
+
+def test_send_message_opens_no_connection_when_a_recipient_is_outside_the_allowlist(smtp_sessions):
+    # Given a message to a third party
+    m = make_message(to='barbara.rega@agroparistech.fr')
+
+    # When we try to send it
+    with pytest.raises(SendRefused):
+        send_message(an_account(), m)
+
+    # Then the guard ran first — nothing ever reached the network
+    assert smtp_sessions == []
+
+
+def test_send_message_hands_the_envelope_exactly_the_addresses_the_guard_returned(smtp_sessions):
+    # Given a message to both allowlisted mailboxes, one in To and one in Cc
+    m = make_message(to=OWNER_PROTON, cc=OWNER_GMAIL)
+
+    # When we send it
+    returned = send_message(an_account(), m)
+
+    # Then the envelope recipients are the guard's list, not re-derived from the headers
+    (from_addr, to_addrs, _), = smtp_sessions[0].sent
+    assert (from_addr, sorted(to_addrs)) == (OWNER_GMAIL, sorted(returned))
