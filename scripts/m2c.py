@@ -80,7 +80,11 @@ def cmd_export(a):
     M, threads = _load(a.account, a.folder, a.limit)
     t = _pick(threads, a.key)
     stamp = datetime.now().astimezone()
-    out = Path(a.out or f"{stamp:%y%m%d_%H%M}__thread_{thread_key(t)}.md")
+    variant = 'raw' if a.raw else 'stripped'
+    # default into verify/, which is gitignored — mailbox content must never reach the remote
+    out = Path(a.out or Path(__file__).resolve().parent.parent / 'verify' /
+               f"{stamp:%y%m%d_%H%M}__thread_{thread_key(t)}.{variant}.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_thread(t, strip_quotes=not a.raw))
     print(f"wrote {out}  ({len(t)} messages)")
     M.logout()

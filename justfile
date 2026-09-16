@@ -32,9 +32,16 @@ thread key account="proton" limit="400" folder="All Mail":
 thread-raw key account="proton" limit="400" folder="All Mail":
     @{{_m2c}} thread {{key}} --raw --account {{account}} --limit {{limit}} --folder "{{folder}}"
 
-# Write a thread to a markdown file for side-by-side checking against ProtonMail
+# Write a thread to verify/ as markdown (quotes stripped — what the agent reads)
 export key account="proton" limit="400" out="" folder="All Mail":
     @{{_m2c}} export {{key}} --account {{account}} --limit {{limit}} --folder "{{folder}}" {{ if out == "" { "" } else { "--out " + out } }}
+
+# Write a thread to verify/ WITH quoted originals — the fair comparison against the ProtonMail UI
+export-raw key account="proton" limit="400" out="" folder="All Mail":
+    @{{_m2c}} export {{key}} --raw --account {{account}} --limit {{limit}} --folder "{{folder}}" {{ if out == "" { "" } else { "--out " + out } }}
+
+# Export BOTH variants of a thread, for side-by-side verification
+export-both key account="proton" limit="400": (export key account limit) (export-raw key account limit)
 
 # --- writing (drafts only — nothing is ever sent) ---------------------------
 
