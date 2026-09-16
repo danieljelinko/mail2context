@@ -1,16 +1,17 @@
 "Reconstruct mail threads from RFC 5322 headers (IMAP offers no THREAD extension)."
+import hashlib
 import re
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 
-__all__ = ['group_threads']
+__all__ = ['group_threads', 'sent_at', 'thread_key']
 
 _ID_RE = re.compile(r'<[^<>]+>')
 _EPOCH = datetime.fromtimestamp(0, timezone.utc)
 
 
-def _sent_at(m: EmailMessage) -> datetime:
+def sent_at(m: EmailMessage) -> datetime:
     "Date header as an aware UTC datetime; epoch when absent or unparseable."
     try: d = parsedate_to_datetime(m.get('Date', '') or '')
     except (TypeError, ValueError): return _EPOCH
@@ -52,4 +53,10 @@ def group_threads(msgs: list[EmailMessage]) -> list[list[EmailMessage]]:
             _union(parent, mid, link)
     out: dict[str, list[EmailMessage]] = {}
     for mid, m in zip(ids, msgs): out.setdefault(_find(parent, mid), []).append(m)
-    return [sorted(t, key=_sent_at) for t in out.values()]
+    return [sorted(t, key=sent_at) for t in out.values()]
+
+
+def thread_key(thread: list[EmailMessage]) -> str:
+    "Short identifier for `thread`, from its earliest Message-ID so later replies do not change it."
+    root = min(thread, key=sent_at)
+    return hashlib.sha1(_own_id(root, 0).encode()).hexdigest()[:8]

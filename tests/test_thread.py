@@ -4,7 +4,7 @@ from email.utils import formatdate
 
 import pytest
 
-from mail2context.thread import group_threads
+from mail2context.thread import group_threads, sent_at
 
 
 @pytest.fixture
@@ -74,3 +74,53 @@ def test_group_threads_links_via_references_when_direct_parent_is_absent(make_ms
     # Then the References chain still binds them into one thread
     assert len(threads) == 1
     assert [m['Message-ID'] for m in threads[0]] == ['<a@x>', '<c@x>']
+
+
+def test_group_threads_returns_every_message_exactly_once(make_msg):
+    # Given a mix of chained and unrelated messages
+    msgs = [make_msg('<a@x>'), make_msg('<b@x>', in_reply_to='<a@x>'),
+            make_msg('<c@x>'), make_msg('<d@x>', refs=('<c@x>',)), make_msg('<e@x>')]
+
+    # When we group them
+    threads = group_threads(msgs)
+
+    # Then the partition accounts for every input message, none dropped or duplicated
+    assert sorted(id(m) for t in threads for m in t) == sorted(id(m) for m in msgs)
+
+
+def test_group_threads_partitions_identically_when_input_order_changes(make_msg):
+    # Given the same messages presented in two different orders
+    def build():
+        return [make_msg('<a@x>'), make_msg('<b@x>', in_reply_to='<a@x>'),
+                make_msg('<c@x>'), make_msg('<d@x>', refs=('<c@x>', '<z@x>'))]
+    forward, backward = build(), list(reversed(build()))
+
+    # When we group each
+    def shape(ms): return {frozenset(m['Message-ID'] for m in t) for t in group_threads(ms)}
+
+    # Then the resulting partition is the same
+    assert shape(forward) == shape(backward)
+
+
+def test_thread_key_is_stable_for_the_same_thread(make_msg):
+    # Given one thread built twice in different orders
+    a, b = make_msg('<a@x>'), make_msg('<b@x>', in_reply_to='<a@x>', secs=60)
+
+    # When we key each ordering
+    from mail2context.thread import thread_key
+
+    # Then the identifier does not change
+    assert thread_key([a, b]) == thread_key([b, a])
+
+
+def test_sent_at_orders_dates_that_string_comparison_would_scramble(make_msg):
+    # Given two messages whose RFC 2822 Date headers start with different weekday names
+    older = make_msg('<a@x>', secs=0)          # a Tuesday
+    newer = make_msg('<b@x>', secs=4 * 86400)  # the following Saturday
+
+    # When we sort them by parsed timestamp
+    ordered = sorted([newer, older], key=sent_at)
+
+    # Then chronology wins over the alphabetical accident of the weekday prefix
+    assert [m['Message-ID'] for m in ordered] == ['<a@x>', '<b@x>']
+    assert older['Date'][:3] > newer['Date'][:3]   # string order really is the opposite

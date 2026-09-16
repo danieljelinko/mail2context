@@ -4,7 +4,7 @@ from email.message import EmailMessage
 
 from bs4 import BeautifulSoup
 
-__all__ = ['extract_text']
+__all__ = ['extract_text', 'list_attachments', 'render_thread']
 
 _BLOCK_TAGS = ['p', 'div', 'br', 'tr', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote']
 
@@ -33,12 +33,35 @@ def _cut_at_attribution(text: str) -> str:
     return text
 
 
+def _squash(s: str) -> str: return re.sub(r'\s+', '', s or '')
+
+
+def _inline_links(soup) -> None:
+    "Rewrite anchors as markdown so the link target survives flattening."
+    for a in soup.find_all('a'):
+        href = (a.get('href') or '').strip()
+        if not href.startswith(('http://', 'https://', 'mailto:')): continue
+        text = a.get_text(' ', strip=True)
+        if text and _squash(text) != _squash(href): a.replace_with(f'[{text}]({href})')
+        else:                                      a.replace_with(href)
+
+
+def _inline_images(soup) -> None:
+    "Keep image alt text, which often carries the only content of a graphical mail."
+    for img in soup.find_all('img'):
+        alt = (img.get('alt') or '').strip()
+        img.replace_with(f'[image: {alt}]' if alt else '')
+
+
 def _html_to_text(html: str, strip_quotes: bool) -> str:
     "Flatten `html` to text, optionally dropping quoted originals and signatures first."
     soup = BeautifulSoup(html, 'html.parser')
+    for bad in soup(['script', 'style', 'head']): bad.decompose()
     if strip_quotes:
         for sel in _QUOTE_SELECTORS:
             for node in soup.select(sel): node.decompose()
+    _inline_images(soup)     # before links: a linked image's alt is the anchor's only text
+    _inline_links(soup)
     for tag in soup.find_all(_BLOCK_TAGS): tag.append('\n')
     return re.sub(r'\n{3,}', '\n\n', soup.get_text()).strip()
 
@@ -53,3 +76,27 @@ def extract_text(msg: EmailMessage, strip_quotes: bool = True) -> str:
     if not html: return ''
     text = _html_to_text(html.get_content(), strip_quotes)
     return _cut_at_attribution(text) if strip_quotes else text
+
+
+def list_attachments(msg: EmailMessage) -> list[str]:
+    "Filenames of `msg`'s attachments, so a file-only mail is not rendered as empty."
+    return [n for p in msg.iter_attachments() if (n := p.get_filename())]
+
+
+def render_thread(msgs: list[EmailMessage], strip_quotes: bool = True) -> str:
+    "Render an ordered thread as markdown: one attributed section per message."
+    out: list[str] = []
+    subj = next((m['Subject'] for m in msgs if m['Subject']), '(no subject)')
+    out.append(f'# {subj}\n')
+    for i, m in enumerate(msgs, 1):
+        out.append(f"## {i}. {m['From'] or '(unknown sender)'} — {m['Date'] or '(no date)'}")
+        if m['Subject'] and m['Subject'] != subj: out.append(f"*Subject:* {m['Subject']}")
+        if m['To']: out.append(f"*To:* {m['To']}")
+        if m['Cc']: out.append(f"*Cc:* {m['Cc']}")
+        atts = list_attachments(m)
+        if atts: out.append(f"*Attachments:* {', '.join(atts)}")
+        body = extract_text(m, strip_quotes=strip_quotes)
+        out.append('')
+        out.append(body if body.strip() else '*(no text content)*')
+        out.append('')
+    return '\n'.join(out).strip() + '\n'

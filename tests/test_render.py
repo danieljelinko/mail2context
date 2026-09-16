@@ -78,3 +78,48 @@ def test_extract_text_keeps_body_when_from_line_has_no_header_block_after_it(mak
 
     # Then nothing is cut — a lone From: is not an attribution
     assert 'we are fine' in out and out.endswith('Thanks')
+
+
+def test_extract_text_keeps_link_target_when_html_has_anchor(make_mail):
+    # Given an HTML body whose meaning depends on where the link points
+    m = make_mail(html='<p>See <a href="https://lab.ai4hu.org/x">the lab</a> please</p>')
+
+    # When we extract it
+    out = extract_text(m, strip_quotes=False)
+
+    # Then both the anchor text and its target survive
+    assert out == 'See [the lab](https://lab.ai4hu.org/x) please'
+
+
+def test_extract_text_emits_bare_url_when_anchor_text_is_the_url(make_mail):
+    # Given a link whose visible text is already the URL
+    m = make_mail(html='<p><a href="https://ai4hu.org/">https://ai4hu.org/</a></p>')
+
+    # When we extract it
+    out = extract_text(m, strip_quotes=False)
+
+    # Then it is not duplicated into [url](url)
+    assert out == 'https://ai4hu.org/'
+
+
+def test_extract_text_keeps_image_alt_when_image_carries_meaning(make_mail):
+    # Given an inline image whose alt text carries the content
+    m = make_mail(html='<p><img src="c.png" alt="Q3 revenue chart"></p>')
+
+    # When we extract it
+    out = extract_text(m, strip_quotes=False)
+
+    # Then the alt text is preserved
+    assert 'Q3 revenue chart' in out
+
+
+def test_extract_text_keeps_image_alt_when_the_image_sits_inside_a_link(make_mail):
+    # Given a linked banner image, as newsletters almost always send
+    m = make_mail(html='<p><a href="https://ai4hu.org/go"><img src="b.png" alt="Register now"></a></p>')
+
+    # When we extract it
+    out = extract_text(m, strip_quotes=False)
+
+    # Then neither the alt text nor the link target is lost
+    assert 'Register now' in out
+    assert 'https://ai4hu.org/go' in out

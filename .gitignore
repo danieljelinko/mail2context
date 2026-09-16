@@ -56,3 +56,7 @@ Thumbs.db
 /CLAUDE.md
 /CLAUDE.md.bak
 # END Ruler Generated Files
+
+# Exported real mail for manual verification — never commit mailbox content
+verify/
+*__thread_*.md
