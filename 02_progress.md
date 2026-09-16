@@ -26,6 +26,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | Handoff + launch prompt for the Phase 2 session | `260916_1711__handoff_phase2_send.md`, `260916_1711__launch_prompt_phase2.md`; prior handoff moved to `archive/` |
 | 2026-09-16 | D-011 send allowlist guard, written before any send code | 9 tests incl. mixed list, Bcc-hidden address, lookalike domain and empty-recipient message; `grep` confirms nothing can send |
 | 2026-09-16 | Gmail parity (Phase 1) complete | `just audit gmail 900` → 0 losses, matching Proton; threads/unread/from all work on Gmail |
 | 2026-09-16 | Fixed three real losses the Gmail corpus exposed | Gmail audit 26,967 → 697 → 42 → **0**; Proton unchanged at 0 across 900. D-012, D-013 |
