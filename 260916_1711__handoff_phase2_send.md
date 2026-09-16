@@ -37,8 +37,8 @@ rules and the gotchas, and it is current as of this handoff.
 
 ### The work is on a branch, unmerged and unpushed
 
-```
-fix/gmail-parity-audit   6 commits ahead of main
+```bash
+git log --oneline main..HEAD    # the branch is fix/gmail-parity-audit
 ```
 
 Each commit is independently green, so it bisects. **Ask the owner** whether to merge, push, or
@@ -117,7 +117,7 @@ alone, but it is fair to remind them it is still sitting there.
 
 ```bash
 cd ~/Work/tools/mail2context
-git log --oneline main..HEAD          # 6 unmerged commits — ask the owner what to do with them
+git log --oneline main..HEAD          # unmerged commits — ask the owner what to do with them
 just bridge-status && just accounts   # expect: up on 1143, then two OK lines
 just check                            # 76 tests + lint + Proton loss audit, ~1 min
 ```

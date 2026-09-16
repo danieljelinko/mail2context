@@ -24,8 +24,9 @@ survive an actual send (D-009 and D-014 are about DRAFTS; sent mail is untested)
 break the chain on one reply to confirm the tool splits the thread as documented.
 
 Before you write any send code:
-  - The previous session's work is on branch `fix/gmail-parity-audit`, 6 commits ahead of main,
-    unmerged and unpushed. Ask me whether to merge, push, or open a PR. Do not assume.
+  - The previous session's work is on branch `fix/gmail-parity-audit`, unmerged and unpushed.
+    Run `git log --oneline main..HEAD` to see it, then ask me whether to merge, push, or open a
+    PR. Do not assume.
   - `.env` has no GMAIL_SMTP_* entries. Ask me for them. Proton's SMTP is Bridge on 127.0.0.1:1025
     and is already configured.
 
