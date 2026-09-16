@@ -15,7 +15,13 @@ from mail2context.mailbox import append_draft, connect, fetch_recent, list_folde
 from mail2context.render import render_thread
 from mail2context.thread import group_threads, sent_at, thread_key
 
-DRAFTS = {'proton': 'Drafts', 'gmail': '[Gmail]/Drafts'}
+DRAFTS   = {'proton': 'Drafts',   'gmail': '[Gmail]/Drafts'}
+ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}   # Gmail namespaces its system folders
+
+
+def _folder(a) -> str:
+    "The folder to scan: what was asked for, else the account's all-mail folder."
+    return a.folder or ALL_MAIL[a.account]
 
 
 def _load(account: str, folder: str, limit: int):
@@ -58,8 +64,8 @@ def cmd_folders(a):
 
 def cmd_threads(a):
     "List reconstructed threads, newest activity first."
-    M, threads = _load(a.account, a.folder, a.limit)
-    print(f"{len(threads)} threads from the last {a.limit} messages in {a.folder}\n")
+    M, threads = _load(a.account, _folder(a), a.limit)
+    print(f"{len(threads)} threads from the last {a.limit} messages in {_folder(a)}\n")
     for t in threads[:a.show]:
         who = sorted({(m['From'] or '').split('<')[0].strip(' "') or '?' for m in t})
         print(f"  {thread_key(t)}  {len(t):3} msg  {str(t[-1]['Date'])[:16]:18} "
@@ -70,14 +76,14 @@ def cmd_threads(a):
 
 def cmd_thread(a):
     "Render one thread as markdown on stdout."
-    M, threads = _load(a.account, a.folder, a.limit)
+    M, threads = _load(a.account, _folder(a), a.limit)
     sys.stdout.write(render_thread(_pick(threads, a.key), strip_quotes=not a.raw))
     M.logout()
 
 
 def cmd_export(a):
     "Write one thread to a markdown file for side-by-side comparison with the mail UI."
-    M, threads = _load(a.account, a.folder, a.limit)
+    M, threads = _load(a.account, _folder(a), a.limit)
     t = _pick(threads, a.key)
     stamp = datetime.now().astimezone()
     variant = 'raw' if a.raw else 'stripped'
@@ -92,7 +98,7 @@ def cmd_export(a):
 
 def cmd_draft(a):
     "Create a reply draft on the thread. Appends to Drafts; never sends (D-003)."
-    M, threads = _load(a.account, a.folder, a.limit)
+    M, threads = _load(a.account, _folder(a), a.limit)
     t = _pick(threads, a.key)
     body = Path(a.file).read_text() if a.file else sys.stdin.read()
     acct = load_account(a.account)
@@ -107,7 +113,7 @@ def cmd_audit(a):
     "Measure what HTML→text conversion loses across the mailbox. Zero is the target."
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
     M = connect(load_account(a.account))
-    rep = audit_messages(fetch_recent(M, a.folder, a.limit))
+    rep = audit_messages(fetch_recent(M, _folder(a), a.limit))
     for k, v in rep.items(): print(f"  {k:22} {v}")
     bad = sum(rep[k] for k in ('text_chunks_lost', 'urls_dropped', 'alts_dropped', 'attachments_unnamed'))
     print(f"\n  {'LOSS DETECTED' if bad else 'no loss detected'} ({bad} items)")
@@ -119,9 +125,9 @@ def main():
     p = argparse.ArgumentParser(prog='m2c', description=__doc__)
     sub = p.add_subparsers(dest='cmd', required=True)
 
-    def common(sp, folder='All Mail'):
+    def common(sp):
         sp.add_argument('--account', default='proton', help='proton | gmail')
-        sp.add_argument('--folder', default=folder)
+        sp.add_argument('--folder', default=None, help='defaults to the account\'s all-mail folder')
         sp.add_argument('--limit', type=int, default=400, help='how many recent messages to scan')
         return sp
 

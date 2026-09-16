@@ -21,24 +21,24 @@ folders account="proton":
 # --- reading ----------------------------------------------------------------
 
 # List reconstructed threads, newest activity first. Each row starts with the thread key.
-threads account="proton" limit="400" show="25" folder="All Mail":
-    @{{_m2c}} threads --account {{account}} --limit {{limit}} --show {{show}} --folder "{{folder}}"
+threads account="proton" limit="400" show="25" folder="":
+    @{{_m2c}} threads --account {{account}} --limit {{limit}} --show {{show}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}
 
 # Print one thread as markdown. KEY is the short id from `just threads`.
-thread key account="proton" limit="400" folder="All Mail":
-    @{{_m2c}} thread {{key}} --account {{account}} --limit {{limit}} --folder "{{folder}}"
+thread key account="proton" limit="400" folder="":
+    @{{_m2c}} thread {{key}} --account {{account}} --limit {{limit}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}
 
 # Print one thread with quoted originals KEPT — use to compare against the mail UI
-thread-raw key account="proton" limit="400" folder="All Mail":
-    @{{_m2c}} thread {{key}} --raw --account {{account}} --limit {{limit}} --folder "{{folder}}"
+thread-raw key account="proton" limit="400" folder="":
+    @{{_m2c}} thread {{key}} --raw --account {{account}} --limit {{limit}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}
 
 # Write a thread to verify/ as markdown (quotes stripped — what the agent reads)
-export key account="proton" limit="400" out="" folder="All Mail":
-    @{{_m2c}} export {{key}} --account {{account}} --limit {{limit}} --folder "{{folder}}" {{ if out == "" { "" } else { "--out " + out } }}
+export key account="proton" limit="400" out="" folder="":
+    @{{_m2c}} export {{key}} --account {{account}} --limit {{limit}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }} {{ if out == "" { "" } else { "--out " + out } }}
 
 # Write a thread to verify/ WITH quoted originals — the fair comparison against the ProtonMail UI
-export-raw key account="proton" limit="400" out="" folder="All Mail":
-    @{{_m2c}} export {{key}} --raw --account {{account}} --limit {{limit}} --folder "{{folder}}" {{ if out == "" { "" } else { "--out " + out } }}
+export-raw key account="proton" limit="400" out="" folder="":
+    @{{_m2c}} export {{key}} --raw --account {{account}} --limit {{limit}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }} {{ if out == "" { "" } else { "--out " + out } }}
 
 # Export BOTH variants of a thread, for side-by-side verification
 export-both key account="proton" limit="400": (export key account limit) (export-raw key account limit)
