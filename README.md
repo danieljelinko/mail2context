@@ -64,18 +64,22 @@ just accounts           # confirms both authenticate
 | `just audit [account] [limit]` | measure conversion loss; exits non-zero if anything is lost |
 | `just check` | tests + lint + full-mailbox loss audit |
 | `just verify-roundtrip` | **TEMPORARY, sends mail** — see below |
+| `just content-send` | **TEMPORARY, sends mail** — Phase 3 rich-content message, see below |
 
 ### Round-trip verification sends real mail (TEMPORARY)
 
-`verify-roundtrip`, `roundtrip-send`, `roundtrip-verify` and `roundtrip-break` are the only
-recipes that **send**, and they exist only for `01_plan.md` Phase 2. D-003 forbids sending;
+`verify-roundtrip`, `roundtrip-send`, `roundtrip-break` (Phase 2) and `content-send`
+(Phase 3) are the only recipes that **send**, and they exist only for `01_plan.md` Phases 2-3. D-003 forbids sending;
 D-011 lifts that narrowly and temporarily, allowing delivery **solely** to `dj@ai4hu.org` and
 `daniel.jelinko@gmail.com`, enforced by a hard allowlist in `mail2context/send.py` that runs
 before any connection is opened. The allowlist is never widened — a new address is an owner
 decision, not a code edit.
 
-`just roundtrip-preview` shows what would be sent and the recipients the guard approves, and
-sends nothing. **Phase 6 deletes `send.py`, `roundtrip.py` and these recipes**, restoring
+`just roundtrip-preview` and `just content-preview` show what would be sent and the recipients
+the guard approves, and send nothing. Phase 3's `content-send` mails one message exercising every
+Markdown feature, accents, the signature and an attachment in each direction; `content-verify
+RUN` diffs each delivered copy against the `.eml` kept under `verify/`, and `content-quotes RUN`
+checks the owner's real Gmail/Proton web-UI replies for quote stripping. **Phase 6 deletes `send.py`, `roundtrip.py` and these recipes**, restoring
 drafts-only.
 
 ### Bodies are Markdown

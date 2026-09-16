@@ -1,7 +1,12 @@
 # Progress
 
 ## In flight
-- Nothing. **Phases 0, 1 and 2 are complete** — see `01_plan.md`. Next session starts Phase 3.
+- **Phase 3 — content fidelity round-trip**, on branch `feat/content-roundtrip` (off
+  `feat/send-roundtrip`, whose disposition — merge / push / PR — is still the owner's call).
+  Built and unit-tested, **nothing sent yet**: `just content-preview` shows the rich message the
+  guard approves each way. Waiting on the owner for (a) the go-ahead to send under D-008, (b) a
+  reply from Gmail's web UI and one from Proton's to the delivered copies, (c) a screenshot of
+  each delivered copy — the blue `4` and "no monospace" are only structurally asserted here.
 
 ## Next
 - **Phase 3 — content fidelity round-trip.** The send path now exists, so Phase 3 needs no new
@@ -29,6 +34,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-16 | Phase 3 checkers + runner, test-first; found and fixed the missing Markdown table rule | 104 tests (was 87); `check_content`/`check_attachment`/`check_quote_stripping` each fail on their own negative fixture; `just content-preview` dry-runs both directions with the guard's approval printed first |
 | 2026-09-16 | **Phase 2 complete** — cross-provider threading round-trip | Run `91fcac`: 6 messages alternating Proton↔Gmail rebuild as **one thread of 6 in send order on both sides**, delivered `In-Reply-To`/`References` intact, `Auto:` collapsed back to `Re:` in transit, and a 7th reply with its headers removed splits 6+1 on both sides. D-015 |
 | 2026-09-16 | SMTP send path + round-trip checkers, behind the D-011 guard | 87 tests (was 76); guard opens no connection on refusal; checker's negative tests prove it can fail. `just verify-roundtrip` runs the whole thing and exits non-zero on any problem |
 | 2026-09-16 | Merged the Gmail-parity branch to `main` and pushed | `main` fast-forwarded to `a7ea2a8` and pushed to origin; Phase 2 work on `feat/send-roundtrip` |
