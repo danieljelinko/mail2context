@@ -92,6 +92,28 @@ The authorisation in D-011 is temporary. When Phases 1-5 pass:
 **Leaving send enabled after validation violates D-011.** Treat this phase as part of the work,
 not cleanup to do later.
 
+## Track G — `mail-guard`: enforcement the agent cannot lift (D-017, separate repo)
+- [ ] Create `~/Work/tools/mail-guard` with its own L4 docs, tests, justfile
+- [ ] nftables rules per uid: SMTP (1025, 25, 465, 587) blocked at levels 1-2; direct IMAP
+      (1143, 993) blocked for uid 1000 at every level once the proxy is in
+- [ ] Filtering IMAP proxy as system user `mailguard`, real credentials root-owned, plaintext
+      loopback listener per account; level 1 refuses STORE/MOVE/COPY/EXPUNGE/DELETE/CREATE/RENAME;
+      APPEND to Drafts only at every level; literals and IDLE passed through raw
+- [ ] `sudo mail-guard 1|2|3 [--for DURATION]` writing a root-owned level file; level 3 re-arms
+- [ ] mail2context works in BOTH modes: `.env`-driven plaintext connect, `just guard-status`,
+      skill's first check
+- [ ] Tests: verb filter + literal passthrough against a fake IMAP server; live level 1/2/3
+      matrix as listed in `260917_1624__handoff_mail_guard.md`
+- [ ] Owner decisions: `STORE +FLAGS \Answered` exception at level 1; Gmail connector scope;
+      whether Phase 6 still deletes the send code
+
+## Track S — scheduled send: study, then decide
+- [ ] Compare (a) draft + the provider web UI's own schedule-send (no code, keeps D-003) with
+      (b) a guard-side approved queue fired by systemd at T (retains a send capability)
+- [ ] Recommend, ask the owner, record the choice as a decision row
+- [ ] If (b): `just schedule KEY body.md WHEN`, `sudo mail-guard approve ID`, D-008 questions
+      before queueing, normalised local+UTC time echoed back; rewrite Phase 6 accordingly
+
 ## Later — attachment contents (split out of Phase 3, D-016)
 - [ ] Surface attachment *contents*, not just filenames: decide formats (txt/pdf/docx), where the
       extracted text goes, size limits. Own phase after Phase 6; needs no send capability.

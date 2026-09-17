@@ -10,6 +10,9 @@
   Proton's to the two copies → `just content-quotes 318ecf`; screenshots of both rendered copies.
 
 ## Next
+- **Track G (`mail-guard`) and Track S (scheduled send study)** — handoff and launch prompt
+  written: `260917_1624__handoff_mail_guard.md`, `260917_1624__launch_prompt_mail_guard.md`.
+  D-017 records the design. Next session starts there.
 - **Phase 3 — content fidelity round-trip.** The send path now exists, so Phase 3 needs no new
   plumbing: send a message exercising every Markdown feature, accents and the signature, then
   audit the delivered copy. The two items it cannot reach by header inspection are a **real**
@@ -35,6 +38,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-17 | Designed the three-level `mail-guard` with the owner; handoff + launch prompt for it and the scheduled-send study | D-017; Track G and Track S in `01_plan.md`; verified the agent has no passwordless sudo and that smtp.gmail.com:587 is reachable from its shell today |
 | 2026-09-16 | Phase 3 content round-trip `318ecf` passes both ways | `just content-verify 318ecf` OK: 0 loss, blue 4, proportional font, attachment sha256 equal on the Gmail and Proton copies. Gmail spam-filed it; Proton rewrote/dropped the plain part — three learnings rows |
 | 2026-09-16 | Phase 3 checkers + runner, test-first; found and fixed the missing Markdown table rule | 104 tests (was 87); `check_content`/`check_attachment`/`check_quote_stripping` each fail on their own negative fixture; `just content-preview` dry-runs both directions with the guard's approval printed first |
 | 2026-09-16 | **Phase 2 complete** — cross-provider threading round-trip | Run `91fcac`: 6 messages alternating Proton↔Gmail rebuild as **one thread of 6 in send order on both sides**, delivered `In-Reply-To`/`References` intact, `Auto:` collapsed back to `Re:` in transit, and a 7th reply with its headers removed splits 6+1 on both sides. D-015 |
