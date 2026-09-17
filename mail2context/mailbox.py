@@ -14,6 +14,7 @@ __all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent'
            'list_uids', 'load_account', 'move_message', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
+_TLS_MODES = ('starttls', 'tls', 'none')   # none: the mail-guard proxy's plaintext loopback listener
 
 
 @dataclass
@@ -23,7 +24,7 @@ class Account:
     port: int
     user: str
     password: str
-    starttls: bool  # True for Bridge (STARTTLS on 1143), False for implicit TLS (993)
+    tls: str        # "starttls" (Bridge on 1143), "tls" (Gmail on 993), "none" (mail-guard proxy on loopback)
 
 
 def load_account(name: str) -> Account:
@@ -32,17 +33,19 @@ def load_account(name: str) -> Account:
     host = os.environ[f'{p}_IMAP_HOST']
     pw = os.environ.get(f'{p}_PASS', '')
     if not pw: raise SystemExit(f"{p}_PASS is empty — set it in .env before using the {name} account")
-    return Account(name.lower(), host, int(os.environ[f'{p}_IMAP_PORT']),
-                   os.environ[f'{p}_USER'], pw, starttls=host in _LOCAL)
+    tls = os.environ.get(f'{p}_IMAP_TLS') or ('starttls' if host in _LOCAL else 'tls')
+    if tls not in _TLS_MODES: raise SystemExit(f"{p}_IMAP_TLS={tls!r}; expected one of {_TLS_MODES}")
+    return Account(name.lower(), host, int(os.environ[f'{p}_IMAP_PORT']), os.environ[f'{p}_USER'], pw, tls)
 
 
 def connect(acct: Account,
             timeout: float | None = None,  # seconds; None blocks, which is right for bulk fetches
             ) -> imaplib.IMAP4:
     "Open an authenticated IMAP connection to `acct`."
-    if not acct.starttls: M = imaplib.IMAP4_SSL(acct.host, acct.port, timeout=timeout)
+    if acct.tls == 'tls': M = imaplib.IMAP4_SSL(acct.host, acct.port, timeout=timeout)
     else:
         M = imaplib.IMAP4(acct.host, acct.port, timeout=timeout)
+    if acct.tls == 'starttls':
         ctx = ssl.create_default_context()
         if acct.host in _LOCAL:                       # Bridge serves a self-signed cert on loopback
             ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE

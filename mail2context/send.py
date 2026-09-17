@@ -16,6 +16,7 @@ __all__ = ['SEND_ALLOWLIST', 'SendRefused', 'SmtpAccount', 'check_recipients', '
 
 _RECIPIENT_HEADERS = ('To', 'Cc', 'Bcc')
 _LOCAL = ('127.0.0.1', 'localhost')
+_TLS_MODES = ('starttls', 'none')   # none: the mail-guard relay's plaintext loopback listener
 
 # Deliberately a module constant, not a parameter. The house rule is to pass project-specific
 # vocabulary in as a required argument, but D-011 demands an allowlist that a call site CANNOT
@@ -48,15 +49,18 @@ class SmtpAccount:
     port: int
     user: str
     password: str
+    tls: str = 'starttls'   # "starttls" (Bridge 1025, Gmail 587) or "none" (mail-guard relay on loopback)
 
 
 def load_smtp(name: str) -> SmtpAccount:
-    "Build an `SmtpAccount` from `<NAME>_SMTP_HOST/PORT` and the account's usual user/password."
+    "Build an `SmtpAccount` from `<NAME>_SMTP_HOST/PORT[/TLS]` and the account's usual user/password."
     p = name.upper()
     pw = os.environ.get(f'{p}_PASS', '')
     if not pw: raise SystemExit(f"{p}_PASS is empty — set it in .env before sending as {name}")
+    tls = os.environ.get(f'{p}_SMTP_TLS') or 'starttls'
+    if tls not in _TLS_MODES: raise SystemExit(f"{p}_SMTP_TLS={tls!r}; expected one of {_TLS_MODES}")
     return SmtpAccount(os.environ[f'{p}_SMTP_HOST'], int(os.environ[f'{p}_SMTP_PORT']),
-                       os.environ[f'{p}_USER'], pw)
+                       os.environ[f'{p}_USER'], pw, tls)
 
 
 def send_message(acct: SmtpAccount, msg: EmailMessage) -> list[str]:
@@ -66,7 +70,7 @@ def send_message(acct: SmtpAccount, msg: EmailMessage) -> list[str]:
     if acct.host in _LOCAL:                     # Bridge serves a self-signed cert on loopback
         ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
     with smtplib.SMTP(acct.host, acct.port, timeout=60) as S:
-        S.starttls(context=ctx)
+        if acct.tls == 'starttls': S.starttls(context=ctx)
         S.login(acct.user, acct.password)
         # Envelope recipients are the guard's return value, not re-derived from the headers, so
         # what reaches the wire is exactly what was checked.

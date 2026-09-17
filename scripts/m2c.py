@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
 from mail2context.compose import build_message, build_reply, list_participants
+from mail2context.guard import describe_guard
 from mail2context.markdown_mail import render_markdown
 from mail2context.mailbox import (append_draft, check_account, connect, fetch_recent,
                                   list_folders, load_account, search_messages)
@@ -70,12 +71,25 @@ def cmd_accounts(a):
 def cmd_bridge_status(a):
     "Whether Proton Bridge is actually serving mail. Logs in — a listening port proves nothing."
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
-    ok, detail = check_account(load_account('proton'))
-    if ok: print(f"Bridge IMAP: up on 1143 ({detail})"); return
+    acct = load_account('proton')
+    ok, detail = check_account(acct)
+    if ok: print(f"Bridge IMAP: up on {acct.port}{' via mail-guard' if acct.tls == 'none' else ''} ({detail})"); return
     print(f"Bridge IMAP: DOWN — {detail}")
     print("  start it:  systemctl --user start protonmail-bridge")
     print("  or:        /usr/lib/protonmail/bridge/bridge --cli   (never /usr/bin/protonmail-bridge — it opens a GUI)")
     raise SystemExit(1)
+
+
+def cmd_guard_status(a):
+    "Whether mail-guard is installed and at which level, then whether each account logs in the way .env routes it."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    print(describe_guard())
+    for name in ('proton', 'gmail'):
+        try: acct = load_account(name)
+        except SystemExit as e: print(f"  {name:8} not configured — {e}"); continue
+        ok, detail = check_account(acct)
+        route = f"{acct.host}:{acct.port} {'plaintext via proxy' if acct.tls == 'none' else acct.tls}"
+        print(f"  {name:8} {'OK    ' if ok else 'FAILED'} {route} ({detail})")
 
 
 def cmd_folders(a):
@@ -245,6 +259,7 @@ def main():
 
     sub.add_parser('accounts', help=cmd_accounts.__doc__).set_defaults(fn=cmd_accounts)
     sub.add_parser('bridge-status', help=cmd_bridge_status.__doc__).set_defaults(fn=cmd_bridge_status)
+    sub.add_parser('guard-status', help=cmd_guard_status.__doc__).set_defaults(fn=cmd_guard_status)
     f = sub.add_parser('folders', help=cmd_folders.__doc__); f.add_argument('--account', default='proton')
     f.set_defaults(fn=cmd_folders)
 

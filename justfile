@@ -15,6 +15,10 @@ default:
 accounts:
     @{{_m2c}} accounts
 
+# Is mail-guard installed, at which level, and does each account log in the way .env routes it?
+guard-status:
+    @{{_m2c}} guard-status
+
 # List mailboxes on an account
 folders account="proton":
     @{{_m2c}} folders --account {{account}}
