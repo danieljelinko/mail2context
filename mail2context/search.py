@@ -17,6 +17,13 @@ def _imap_date(iso: str) -> str:
     return f'{d.day:02d}-{_MONTHS[d.month - 1]}-{d.year}'
 
 
+def _quote_value(val: str) -> str:
+    "imaplib quotes nothing: a space would end the command. Non-ASCII stays raw — `search_messages` sends it as a literal."
+    if not val.isascii(): return val
+    if any(c in val for c in ' "\\'): return '"' + val.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return val
+
+
 def build_search_criteria(frm: str | None = None,       # substring of the From header
                           to: str | None = None,        # substring of the To header
                           subject: str | None = None,
@@ -32,7 +39,7 @@ def build_search_criteria(frm: str | None = None,       # substring of the From 
     if flagged:    crit.append('FLAGGED')
     if unanswered: crit.append('UNANSWERED')
     for key, val in (('FROM', frm), ('TO', to), ('SUBJECT', subject), ('TEXT', text)):
-        if val: crit += [key, val]
+        if val: crit += [key, _quote_value(val)]
     for key, val in (('SINCE', since), ('BEFORE', before)):
         if val: crit += [key, _imap_date(val)]
     return crit or ['ALL']

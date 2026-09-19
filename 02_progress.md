@@ -28,6 +28,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-19 | Multi-word and accented searches work; `just search` keeps quoted args whole | 121 tests (was 115): quoting, UTF-8 literal placed last, two-literal refusal against a plaintext fake; live on Bridge: `about "47 RUE DE SÉLESTAT / DEUXIEME ETAGE"` finds the thread. Four learnings rows; `mail` skill gained a search-semantics section and a worked example |
 | 2026-09-17 | Built `mail-guard` (separate repo) and the guard mode of mail2context; decided D-018..D-021 with the owner | mail-guard: 89 tests via real `imaplib`/`smtplib` against asyncio fakes incl. TLS upstreams; mail2context: 115 tests, `just guard-status` reports direct mode with both accounts OK; merged `feat/content-roundtrip` to `main` and pushed as the owner chose |
 | 2026-09-17 | Designed the three-level `mail-guard` with the owner; handoff + launch prompt for it and the scheduled-send study | D-017; Track G and Track S in `01_plan.md`; verified the agent has no passwordless sudo and that smtp.gmail.com:587 is reachable from its shell today |
 | 2026-09-16 | Phase 3 content round-trip `318ecf` passes both ways | `just content-verify 318ecf` OK: 0 loss, blue 4, proportional font, attachment sha256 equal on the Gmail and Proton copies. Gmail spam-filed it; Proton rewrote/dropped the plain part — three learnings rows |

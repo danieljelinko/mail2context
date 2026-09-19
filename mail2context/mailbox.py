@@ -103,8 +103,13 @@ def search_messages(M: imaplib.IMAP4,
                     ) -> list[EmailMessage]:
     "Fetch the newest `limit` messages in `folder` matching IMAP SEARCH `criteria`."
     M.select(_quote(folder), readonly=True)
-    try: _, data = M.uid('search', 'UTF-8', *criteria)
-    except imaplib.IMAP4.error: _, data = M.uid('search', None, *criteria)  # server may refuse a charset
+    raw = [i for i, c in enumerate(criteria) if not c.isascii()]
+    if len(raw) > 1: raise SystemExit('search: one accented term per search — imaplib carries a single literal')
+    if raw:                                        # a quoted string is 7-bit only; Gmail refuses UTF-8 in one
+        i = raw[0]; key, val = criteria[i-1], criteria[i]
+        criteria = ['CHARSET', 'UTF-8'] + criteria[:i-1] + criteria[i+1:] + [key]
+        M.literal = val.encode('utf-8')            # imaplib appends it after the last argument
+    _, data = M.uid('search', *criteria)
     return _fetch_uids(M, data[0].split()[-limit:] if data and data[0] else [])
 
 

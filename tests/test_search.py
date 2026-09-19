@@ -101,3 +101,27 @@ def test_annotate_flags_replaces_rather_than_appends_on_refetch():
     # When we read its flags
     # Then the newest annotation wins, with no duplicate header left behind
     assert flags_of(m) == {'\\Seen', '\\Flagged'}
+
+
+def test_build_search_criteria_quotes_a_multi_word_value():
+    # Given a phrase — imaplib quotes nothing, and a bare space ends the command
+    crit = build_search_criteria(subject='DEUXIEME ETAGE', frm='adrien')
+
+    # Then the phrase is quoted and the single word is not
+    assert crit == ['FROM', 'adrien', 'SUBJECT', '"DEUXIEME ETAGE"']
+
+
+def test_build_search_criteria_escapes_quotes_and_backslashes_inside_a_quoted_value():
+    # Given a value containing the quoted-string specials
+    crit = build_search_criteria(text='say "hi" \\ there')
+
+    # Then they are escaped so the server reads one string
+    assert crit == ['TEXT', '"say \\"hi\\" \\\\ there"']
+
+
+def test_build_search_criteria_leaves_a_non_ascii_value_raw_for_the_transport():
+    # Given an accented value — a quoted string may only carry 7-bit; the transport sends it as a literal
+    crit = build_search_criteria(subject='RUE DE SÉLESTAT')
+
+    # Then it is passed through untouched, unquoted
+    assert crit == ['SUBJECT', 'RUE DE SÉLESTAT']

@@ -1,6 +1,9 @@
+import socket, threading
+from collections.abc import Callable
+
 import pytest
 
-from mail2context.mailbox import Account, check_account, connect, load_account
+from mail2context.mailbox import Account, check_account, connect, load_account, search_messages
 
 
 def _closed_port_account() -> Account:
@@ -98,3 +101,77 @@ def test_connect_logs_in_over_plaintext_when_tls_is_none():
     # Then the LOGIN went over the plain socket, with no STARTTLS attempted
     assert any(b' LOGIN ' in l for l in seen) and not any(b'STARTTLS' in l for l in seen)
     srv.close()
+
+
+@pytest.fixture
+def plain_imap(request) -> Callable[[], tuple[int, list[bytes]]]:
+    "Factory: a plaintext IMAP server that OKs everything, honours literals, and records raw command lines."
+    servers = []
+    def _start() -> tuple[int, list[bytes]]:
+        seen: list[bytes] = []
+        srv = socket.socket(); srv.bind(('127.0.0.1', 0)); srv.listen(1); servers.append(srv)
+        def serve():
+            c, _ = srv.accept(); c.sendall(b'* OK ready\r\n'); f = c.makefile('rb')
+            for line in f:
+                seen.append(line); tag, verb = line.split(b' ', 2)[:2]; verb = verb.upper().strip()
+                if line.rstrip().endswith(b'}'):                       # literal follows: ask for it, record it
+                    n = int(line.rstrip()[line.rstrip().rindex(b'{') + 1:-1]); c.sendall(b'+ go\r\n')
+                    seen.append(f.read(n)); f.readline()
+                if verb == b'CAPABILITY': c.sendall(b'* CAPABILITY IMAP4rev1\r\n' + tag + b' OK done\r\n')
+                elif verb == b'UID' and b'SEARCH' in line.upper(): c.sendall(b'* SEARCH\r\n' + tag + b' OK done\r\n')
+                elif verb == b'LOGOUT': c.sendall(b'* BYE\r\n' + tag + b' OK done\r\n'); break
+                else: c.sendall(tag + b' OK done\r\n')
+            c.close()
+        threading.Thread(target=serve, daemon=True).start()
+        return srv.getsockname()[1], seen
+    yield _start
+    for s in servers: s.close()
+
+
+def _search_lines(seen: list[bytes]) -> list[bytes]:
+    "The raw UID SEARCH command line(s) and any literal bytes that followed."
+    out = []
+    for i, l in enumerate(seen):
+        if b'UID SEARCH' in l.upper(): out.append(l); out.extend(seen[i+1:i+2] if l.rstrip().endswith(b'}') else [])
+    return out
+
+
+def test_search_messages_sends_ascii_criteria_as_one_plain_command(plain_imap):
+    # Given a plain server and quoted ASCII criteria
+    port, seen = plain_imap()
+    M = connect(Account('proton', '127.0.0.1', port, 'u', 'x', tls='none'), timeout=5)
+
+    # When we search
+    search_messages(M, 'INBOX', ['FROM', 'adrien', 'SUBJECT', '"DEUXIEME ETAGE"'], 10)
+
+    # Then exactly one SEARCH went out, with no CHARSET and the phrase still quoted
+    lines = _search_lines(seen)
+    assert len(lines) == 1 and lines[0].endswith(b'UID SEARCH FROM adrien SUBJECT "DEUXIEME ETAGE"\r\n')
+    M.logout()
+
+
+def test_search_messages_sends_a_non_ascii_value_as_a_utf8_literal_last(plain_imap):
+    # Given an accented value in the middle of the criteria — Gmail refuses it in a quoted string
+    port, seen = plain_imap()
+    M = connect(Account('gmail', '127.0.0.1', port, 'u', 'x', tls='none'), timeout=5)
+
+    # When we search
+    search_messages(M, 'INBOX', ['SUBJECT', 'RUE DE SÉLESTAT', 'FROM', 'adrien'], 10)
+
+    # Then the command declares UTF-8, moves that key last, and sends the value as a literal
+    line, literal = _search_lines(seen)
+    assert line.endswith(b'UID SEARCH CHARSET UTF-8 FROM adrien SUBJECT {16}\r\n')
+    assert literal == 'RUE DE SÉLESTAT'.encode()
+    M.logout()
+
+
+def test_search_messages_refuses_two_non_ascii_values(plain_imap):
+    # Given two accented values — imaplib carries one literal per command
+    port, _ = plain_imap()
+    M = connect(Account('gmail', '127.0.0.1', port, 'u', 'x', tls='none'), timeout=5)
+
+    # When we search
+    # Then it is refused with an explanation rather than sent malformed
+    with pytest.raises(SystemExit, match='one'):
+        search_messages(M, 'INBOX', ['SUBJECT', 'Sélestat', 'TEXT', 'Adrién'], 10)
+    M.logout()
