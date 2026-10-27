@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import pytest
 
-from mail2context.mailbox import Account, check_account, connect, load_account, search_messages
+from mail2context.mailbox import Account, check_account, connect, find_sent_folder, list_message_dates, load_account, search_messages
 
 
 def _closed_port_account() -> Account:
@@ -175,3 +175,36 @@ def test_search_messages_refuses_two_non_ascii_values(plain_imap):
     with pytest.raises(SystemExit, match='one'):
         search_messages(M, 'INBOX', ['SUBJECT', 'Sélestat', 'TEXT', 'Adrién'], 10)
     M.logout()
+
+
+class _ScriptedImap:
+    "An IMAP connection that answers from a script and records what it was asked. The server is the external boundary."
+    def __init__(self, folders: list[bytes], uids: bytes, fetched: list[bytes]): self.folders, self.uids, self.fetched, self.asked = folders, uids, fetched, []
+    def list(self): return 'OK', self.folders
+    def select(self, folder, readonly=False): self.asked.append(('select', folder, readonly)); return 'OK', [b'3']
+    def uid(self, command, *args):
+        self.asked.append((command, *args))
+        return ('OK', [self.uids]) if command == 'search' else ('OK', self.fetched)
+
+
+def test_find_sent_folder_returns_the_mailbox_flagged_sent_when_its_name_holds_a_space():
+    # Given a server whose sent mailbox has a localised, two-word name
+    M = _ScriptedImap([b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Sent) "/" "[Gmail]/Sent Mail"', b'(\\Drafts) "/" "[Gmail]/Drafts"'], b'', [])
+
+    # When we ask for the sent folder
+    folder = find_sent_folder(M)
+
+    # Then it is the flagged one, whole
+    assert folder == '[Gmail]/Sent Mail'
+
+
+def test_list_message_dates_asks_for_arrival_times_only_when_reading_a_folder():
+    # Given a folder with two messages since the date
+    M = _ScriptedImap([], b'7 9', [b'1 (UID 7 INTERNALDATE "05-Oct-2026 09:15:02 +0200")', b'2 (UID 9 INTERNALDATE "06-Oct-2026 18:40:00 +0000")'])
+
+    # When we list the dates since 5 October
+    dates = list_message_dates(M, 'Sent', '2026-10-05')
+
+    # Then both times come back with their zone, the folder was opened read-only, and nothing but INTERNALDATE was fetched
+    assert [d.isoformat() for d in dates] == ['2026-10-05T09:15:02+02:00', '2026-10-06T18:40:00+00:00']
+    assert M.asked == [('select', 'Sent', True), ('search', None, 'SINCE', '05-Oct-2026'), ('fetch', b'7,9', '(INTERNALDATE)')]

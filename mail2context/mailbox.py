@@ -1,17 +1,19 @@
 "IMAP access to a mail account: Proton via local Bridge, or Gmail with an app password."
 import imaplib
 import os
+import re
 import ssl
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 
-from .search import annotate_flags, parse_flags
+from .search import _imap_date, annotate_flags, parse_flags
 
-__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'list_folders',
-           'list_uids', 'load_account', 'move_message', 'search_messages']
+__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'find_sent_folder', 'list_folders',
+           'list_message_dates', 'list_uids', 'load_account', 'move_message', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
 _TLS_MODES = ('starttls', 'tls', 'none')   # none: the mail-guard proxy's plaintext loopback listener
@@ -74,6 +76,28 @@ def list_folders(M: imaplib.IMAP4) -> list[str]:
     "Mailbox names available on the server."
     _, data = M.list()
     return [line.decode('utf-8', 'replace').rsplit(' "/" ', 1)[-1].strip('"') for line in data if line]
+
+
+def find_sent_folder(M: imaplib.IMAP4) -> str | None:
+    "The mailbox the server flags \\Sent (Gmail names it in the account's language); None when none is flagged."
+    _, data = M.list()
+    for line in data:
+        text = line.decode('utf-8', 'replace') if line else ''
+        if '\\Sent' in text.split(')', 1)[0]: return text.rsplit(' "/" ', 1)[-1].strip('"')
+    return None
+
+
+def list_message_dates(M: imaplib.IMAP4, folder: str,
+                       since: str,  # ISO date, YYYY-MM-DD; messages that arrived that day or later
+                       ) -> list[datetime]:
+    "When each message arrived in `folder`, read-only. Only INTERNALDATE is asked for: no header, subject or body leaves the server."
+    M.select(_quote(folder), readonly=True)
+    _, data = M.uid('search', None, 'SINCE', _imap_date(since))
+    uids = data[0].split() if data and data[0] else []
+    if not uids: return []
+    _, resp = M.uid('fetch', b','.join(uids), '(INTERNALDATE)')
+    found = (re.search(rb'INTERNALDATE "([^"]+)"', line) for line in resp if isinstance(line, bytes))
+    return [datetime.strptime(m.group(1).decode().strip(), '%d-%b-%Y %H:%M:%S %z') for m in found if m]
 
 
 def _fetch_uids(M: imaplib.IMAP4, uids: list[bytes]) -> list[EmailMessage]:

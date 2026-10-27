@@ -14,8 +14,8 @@ from mail2context.audit import audit_messages
 from mail2context.compose import build_message, build_reply, list_participants
 from mail2context.guard import describe_guard
 from mail2context.markdown_mail import render_markdown
-from mail2context.mailbox import (append_draft, check_account, connect, fetch_recent,
-                                  list_folders, load_account, search_messages)
+from mail2context.mailbox import (append_draft, check_account, connect, fetch_recent, find_sent_folder,
+                                  list_folders, list_message_dates, load_account, search_messages)
 from mail2context.search import build_search_criteria, flags_of, is_unread
 from mail2context.render import render_thread
 from mail2context.thread import group_threads, message_id, sent_at, thread_key
@@ -97,6 +97,16 @@ def cmd_folders(a):
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
     M = connect(load_account(a.account))
     for f in list_folders(M): print(" ", f)
+    M.logout()
+
+
+def cmd_sent_dates(a):
+    "Print when each sent message was sent since a date, one ISO time per line. Reads dates only: no subject, sender or body."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    M = connect(load_account(a.account))
+    folder = a.folder or find_sent_folder(M)
+    if not folder: raise SystemExit(f"{a.account}: no mailbox is flagged as sent mail — name it with --folder (see `just folders {a.account}`)")
+    for d in list_message_dates(M, folder, a.since): print(d.isoformat())
     M.logout()
 
 
@@ -262,6 +272,9 @@ def main():
     sub.add_parser('guard-status', help=cmd_guard_status.__doc__).set_defaults(fn=cmd_guard_status)
     f = sub.add_parser('folders', help=cmd_folders.__doc__); f.add_argument('--account', default='proton')
     f.set_defaults(fn=cmd_folders)
+    sd = sub.add_parser('sent-dates', help=cmd_sent_dates.__doc__); sd.add_argument('--account', default='proton')
+    sd.add_argument('--since', required=True, help='YYYY-MM-DD'); sd.add_argument('--folder', default=None, help='defaults to the mailbox flagged as sent mail')
+    sd.set_defaults(fn=cmd_sent_dates)
 
     t = common(sub.add_parser('threads', help=cmd_threads.__doc__))
     t.add_argument('--show', type=int, default=25)

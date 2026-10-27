@@ -25,6 +25,10 @@ guard-status:
 folders account="proton":
     @{{_m2c}} folders --account {{account}}
 
+# When each sent message was sent since a date (YYYY-MM-DD), one ISO time per line. Dates only: no subject, sender or body is read
+sent-dates account since folder="":
+    @{{_m2c}} sent-dates --account {{account}} --since {{since}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}
+
 # --- reading ----------------------------------------------------------------
 
 # List reconstructed threads, newest activity first. Each row starts with the thread key.
