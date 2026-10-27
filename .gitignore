@@ -60,3 +60,4 @@ Thumbs.db
 # Exported real mail for manual verification — never commit mailbox content
 verify/
 *__thread_*.md
+.venv/

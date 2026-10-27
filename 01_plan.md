@@ -77,42 +77,36 @@ Implement the guard **test-first, before any send code exists** — **DONE 2026-
       threading in the client's own conversation view
 - [ ] Bind into an evidence README with a coverage matrix — no silent gaps
 
-## Phase 6 — REMOVE the send capability (not optional)
+## Phase 6 — CONFINE the send capability to the guard (rewritten 2026-09-17, D-021)
 
-The authorisation in D-011 is temporary. When Phases 1-5 pass:
+D-011's "delete the send code" is replaced: with `mail-guard` installed the code path cannot reach the
+wire except through the guard's SMTP relay, and only while the owner has opened level 3 with sudo for
+a bounded time. The code stays; the guarantee moved out of the repo.
 
-- [ ] Delete the send code path, the allowlist and its CLI/just entry points
-- [ ] Keep the round-trip tests that do not require sending; mark the rest skipped with a note
-      pointing at D-011
-- [ ] `grep -rn "smtp\|send" mail2context/ scripts/ justfile` → verify: nothing can send
-- [ ] Restore the `mail` skill's unqualified "never send" wording
-- [ ] Append a decision row recording that D-011 has been retired, with the date
-- [ ] Tell the owner it is done
-
-**Leaving send enabled after validation violates D-011.** Treat this phase as part of the work,
-not cleanup to do later.
+- [ ] `mail-guard` installed and `just live-check` green at levels 1, 2 and 3 (Track G)
+- [ ] The D-011 allowlist stays in `send.py` as a second belt; `test_send_allowlist_holds_exactly_the_two_addresses_d011_authorised` stays its tripwire
+- [ ] `grep -rn "smtp\|send" mail2context/ scripts/ justfile` documents what exists — every send path goes through `send_message`, whose host/port come from `.env`, which routes to the relay
+- [ ] Drop the TEMPORARY markers from `send.py`, `roundtrip.py`, `scripts/roundtrip.py` and the recipes; point them at D-021 instead
+- [ ] The `mail` skill says: sending needs level 3, which only the owner opens
 
 ## Track G — `mail-guard`: enforcement the agent cannot lift (D-017, separate repo)
-- [ ] Create `~/Work/tools/mail-guard` with its own L4 docs, tests, justfile
-- [ ] nftables rules per uid: SMTP (1025, 25, 465, 587) blocked at levels 1-2; direct IMAP
-      (1143, 993) blocked for uid 1000 at every level once the proxy is in
-- [ ] Filtering IMAP proxy as system user `mailguard`, real credentials root-owned, plaintext
-      loopback listener per account; level 1 refuses STORE/MOVE/COPY/EXPUNGE/DELETE/CREATE/RENAME;
-      APPEND to Drafts only at every level; literals and IDLE passed through raw
-- [ ] `sudo mail-guard 1|2|3 [--for DURATION]` writing a root-owned level file; level 3 re-arms
-- [ ] mail2context works in BOTH modes: `.env`-driven plaintext connect, `just guard-status`,
-      skill's first check
-- [ ] Tests: verb filter + literal passthrough against a fake IMAP server; live level 1/2/3
-      matrix as listed in `260917_1624__handoff_mail_guard.md`
-- [ ] Owner decisions: `STORE +FLAGS \Answered` exception at level 1; Gmail connector scope;
-      whether Phase 6 still deletes the send code
+- [x] `~/Work/tools/mail-guard` with its own L4 docs, tests (89), justfile — built 2026-09-17
+- [x] nftables: uid 1000 rejected on 25, 110, 143, 465, 587, 993, 995, 1025, 1143 at every level (D-020: no toggling)
+- [x] Filtering IMAP proxy as system user `mailguard`, real credentials root-owned, plaintext loopback per account;
+      level 1 refuses STORE/MOVE/COPY/EXPUNGE/DELETE/CREATE/RENAME/CLOSE except D-018; APPEND to Drafts only; literals and IDLE raw
+- [x] SMTP relay per account: refuses below level 3, authenticates upstream with the real password at 3 (D-020)
+- [x] `sudo mail-guard 1|2|3 --for DURATION`; level 3 carries its expiry in the file and re-arms by transient timer
+- [x] mail2context works in BOTH modes: `*_IMAP_TLS=none` / `*_SMTP_TLS=none`, `just guard-status`, skill's first check
+- [x] Unit tests: filter, literal passthrough, desync on upstream NO, IDLE, TLS/STARTTLS upstreams, relay, CLI
+- [ ] **Owner:** `sudo ~/Work/tools/mail-guard/install.sh --seed-from ~/Work/tools/mail2context/.env`, merge
+      `/etc/mail-guard/mail2context.env` into `.env`, then the live matrix: `just live-check` (in mail-guard) at 1, 2, 3
+      plus `just threads`, `just draft-preview`, `just draft`, `just content-preview` at 1 and `just content-send` at 3
+- [ ] **Owner:** rotate the Gmail app password; disconnect the claude.ai Gmail connector
+- [x] Owner decisions: D-018 STORE exception; connector to be disconnected; docker group kept; Phase 6 rewritten (D-021)
 
-## Track S — scheduled send: study, then decide
-- [ ] Compare (a) draft + the provider web UI's own schedule-send (no code, keeps D-003) with
-      (b) a guard-side approved queue fired by systemd at T (retains a send capability)
-- [ ] Recommend, ask the owner, record the choice as a decision row
-- [ ] If (b): `just schedule KEY body.md WHEN`, `sudo mail-guard approve ID`, D-008 questions
-      before queueing, normalised local+UTC time echoed back; rewrite Phase 6 accordingly
+## Track S — scheduled send: decided (D-019, 2026-09-17)
+- [x] Compared (a) draft + the provider web UI's own schedule-send with (b) a guard-side approved queue
+- [x] Owner chose (a): no code; the `mail` skill tells the agent to draft and hand over the schedule step
 
 ## Later — attachment contents (split out of Phase 3, D-016)
 - [ ] Surface attachment *contents*, not just filenames: decide formats (txt/pdf/docx), where the

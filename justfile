@@ -2,6 +2,8 @@
 # Every recipe is safe to run: reads are read-only (BODY.PEEK, never sets \Seen),
 # and the only write is `draft`, which appends to Drafts and never sends (D-003).
 
+set positional-arguments   # so `search` can pass "$@" and keep a quoted multi-word value whole
+
 _m2c := "uv run python scripts/m2c.py"
 _rt  := "uv run python scripts/roundtrip.py"
 
@@ -15,9 +17,17 @@ default:
 accounts:
     @{{_m2c}} accounts
 
+# Is mail-guard installed, at which level, and does each account log in the way .env routes it?
+guard-status:
+    @{{_m2c}} guard-status
+
 # List mailboxes on an account
 folders account="proton":
     @{{_m2c}} folders --account {{account}}
+
+# When each sent message was sent since a date (YYYY-MM-DD), one ISO time per line. Dates only: no subject, sender or body is read
+sent-dates account since folder="":
+    @{{_m2c}} sent-dates --account {{account}} --since {{since}} {{ if folder == "" { "" } else { "--folder \"" + folder + "\"" } }}
 
 # --- reading ----------------------------------------------------------------
 
@@ -27,17 +37,17 @@ threads account="proton" limit="400" show="25" folder="":
 
 # Search server-side, then show whole threads: --from --to --subject --text --since --before --unread --flagged --unanswered --needs-reply
 search *args:
-    @{{_m2c}} search {{args}}
+    @{{_m2c}} search "$@"
 
 # Unread threads in the inbox
 unread account="proton" show="25":
     @{{_m2c}} search --unread --folder INBOX --account {{account}} --show {{show}}
 
-# Threads involving a sender
+# Threads in which SENDER wrote at least one message (FROM header; the whole thread is shown)
 from sender account="proton" limit="900" show="25":
     @{{_m2c}} search --from "{{sender}}" --account {{account}} --limit {{limit}} --show {{show}}
 
-# Threads mentioning a term anywhere in headers or body
+# Threads mentioning a term anywhere in headers or body — also how to find mail from OR to an address
 about term account="proton" limit="900" show="25":
     @{{_m2c}} search --text "{{term}}" --account {{account}} --limit {{limit}} --show {{show}}
 

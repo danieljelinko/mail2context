@@ -169,3 +169,28 @@ def test_send_message_hands_the_envelope_exactly_the_addresses_the_guard_returne
     # Then the envelope recipients are the guard's list, not re-derived from the headers
     (from_addr, to_addrs, _), = smtp_sessions[0].sent
     assert (from_addr, sorted(to_addrs)) == (OWNER_GMAIL, sorted(returned))
+
+
+def test_load_smtp_defaults_tls_to_starttls_and_reads_none_for_the_guard_relay(monkeypatch):
+    # Given the SMTP variables with and without the TLS option
+    for k, v in {'PROTON_SMTP_HOST': '127.0.0.1', 'PROTON_SMTP_PORT': '1025', 'PROTON_USER': 'u', 'PROTON_PASS': 'p',
+                 'GMAIL_SMTP_HOST': '127.0.0.1', 'GMAIL_SMTP_PORT': '2587', 'GMAIL_SMTP_TLS': 'none',
+                 'GMAIL_USER': 'g', 'GMAIL_PASS': 'token'}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv('PROTON_SMTP_TLS', raising=False)
+
+    # When loaded
+    # Then the default is STARTTLS as before, and `none` selects the relay's plaintext loopback
+    assert load_smtp('proton').tls == 'starttls'
+    assert load_smtp('gmail').tls == 'none'
+
+
+def test_send_message_skips_starttls_when_tls_is_none(smtp_sessions):
+    # Given an account pointed at the guard relay
+    acct = SmtpAccount('127.0.0.1', 2587, OWNER_GMAIL, 'token', tls='none')
+
+    # When we send an allowlisted message
+    send_message(acct, make_message(to=OWNER_PROTON))
+
+    # Then the session never negotiated STARTTLS
+    assert not hasattr(smtp_sessions[0], 'tls_context')

@@ -1,36 +1,26 @@
 # Progress
 
 ## In flight
-- **Phase 3 — content fidelity round-trip**, run `318ecf`, branch `feat/content-roundtrip`
-  (`main` was fast-forwarded to `a3bf25a` and pushed; later commits are on the branch).
-  `just content-verify 318ecf` → **OK on both providers**: 0 audit loss, blue `4` intact, no
-  monospace body, attachment bytes equal. Findings: Gmail filed the Proton copy as **spam**;
-  Proton **regenerated** the plain part on send and **dropped** it on receipt (learnings).
-  Still open, owner at a browser: reply from Gmail's web UI (after un-spamming) and from
-  Proton's to the two copies → `just content-quotes 318ecf`; screenshots of both rendered copies.
+- **Track G — `mail-guard` built, install pending the owner.** `~/Work/tools/mail-guard` at `2d89c19`:
+  89 tests green, Ruff clean. mail2context on `feat/guard-mode` (`main` was fast-forwarded to `539abf3`
+  and pushed): `*_IMAP_TLS` / `*_SMTP_TLS` options, `just guard-status`, 115 tests. The owner runs
+  `sudo ~/Work/tools/mail-guard/install.sh --seed-from ~/Work/tools/mail2context/.env`, merges
+  `/etc/mail-guard/mail2context.env` into `.env`, then the live matrix in `01_plan.md` Track G runs.
+- **Phase 3** still open at the browser: reply from Gmail's web UI (after un-spamming) and from Proton's
+  to the two `m2c content 318ecf` copies → `just content-quotes 318ecf`; screenshots of both rendered copies.
 
 ## Next
-- **Track G (`mail-guard`) and Track S (scheduled send study)** — handoff and launch prompt
-  written: `260917_1624__handoff_mail_guard.md`, `260917_1624__launch_prompt_mail_guard.md`.
-  D-017 records the design. Next session starts there.
-- **Phase 3 — content fidelity round-trip.** The send path now exists, so Phase 3 needs no new
-  plumbing: send a message exercising every Markdown feature, accents and the signature, then
-  audit the delivered copy. The two items it cannot reach by header inspection are a **real**
-  `gmail_quote` block (reply from Gmail's web UI) and a real `protonmail_quote` (Proton's UI) —
-  both need the owner at a browser.
-- **The send capability is now LIVE** and must be removed at Phase 6. `mail2context/send.py`,
-  `mail2context/roundtrip.py`, `scripts/roundtrip.py` and the five `roundtrip*` just recipes are
-  all marked TEMPORARY in their own docstrings. Run `just roundtrip-preview` to see the guard
-  refuse-or-approve without sending.
-- Attachment *contents* (currently only filenames surface)
-- Consider whether `just check` should audit Gmail too — it is Proton-only because a 900-message
-  Gmail fetch takes ~15 min against ~1 min for Bridge.
+- Live matrix at levels 1, 2, 3 once installed; then Phase 4 at level 1 (D-018 allows `\Answered`).
+- Phase 6 as rewritten (D-021): drop the TEMPORARY markers once the guard is live.
+- Attachment *contents* (D-016), after Phase 6.
+- Consider whether `just check` should audit Gmail too (900-message fetch ~15 min).
 
 ## Blocked
-- Nothing. Phases 3-5 can proceed on the send path built in Phase 2; Phase 3's quote-block items
-  need the owner to reply from each provider's web UI.
+- Track G live checks: need the owner's sudo once for `install.sh`. The agent has none, by design.
 
 ## Owner action outstanding
+- Install the guard (above); rotate the Gmail app password afterwards; disconnect the claude.ai Gmail connector.
+- Phase 3 browser steps and screenshots.
 - The FIPDes Day thank-you draft to Barbara in Proton Drafts still contains the literal
   `[FRIEND'S NAME]`. Owner chose to edit it in the Proton UI themselves (2026-09-16).
 
@@ -38,6 +28,8 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-09-19 | Multi-word and accented searches work; `just search` keeps quoted args whole | 121 tests (was 115): quoting, UTF-8 literal placed last, two-literal refusal against a plaintext fake; live on Bridge: `about "47 RUE DE SÉLESTAT / DEUXIEME ETAGE"` finds the thread. Four learnings rows; `mail` skill gained a search-semantics section and a worked example |
+| 2026-09-17 | Built `mail-guard` (separate repo) and the guard mode of mail2context; decided D-018..D-021 with the owner | mail-guard: 89 tests via real `imaplib`/`smtplib` against asyncio fakes incl. TLS upstreams; mail2context: 115 tests, `just guard-status` reports direct mode with both accounts OK; merged `feat/content-roundtrip` to `main` and pushed as the owner chose |
 | 2026-09-17 | Designed the three-level `mail-guard` with the owner; handoff + launch prompt for it and the scheduled-send study | D-017; Track G and Track S in `01_plan.md`; verified the agent has no passwordless sudo and that smtp.gmail.com:587 is reachable from its shell today |
 | 2026-09-16 | Phase 3 content round-trip `318ecf` passes both ways | `just content-verify 318ecf` OK: 0 loss, blue 4, proportional font, attachment sha256 equal on the Gmail and Proton copies. Gmail spam-filed it; Proton rewrote/dropped the plain part — three learnings rows |
 | 2026-09-16 | Phase 3 checkers + runner, test-first; found and fixed the missing Markdown table rule | 104 tests (was 87); `check_content`/`check_attachment`/`check_quote_stripping` each fail on their own negative fixture; `just content-preview` dry-runs both directions with the guard's approval printed first |

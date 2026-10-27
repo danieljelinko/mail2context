@@ -1,19 +1,22 @@
 "IMAP access to a mail account: Proton via local Bridge, or Gmail with an app password."
 import imaplib
 import os
+import re
 import ssl
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 
-from .search import annotate_flags, parse_flags
+from .search import _imap_date, annotate_flags, parse_flags
 
-__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'list_folders',
-           'list_uids', 'load_account', 'move_message', 'search_messages']
+__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'find_sent_folder', 'list_folders',
+           'list_message_dates', 'list_uids', 'load_account', 'move_message', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
+_TLS_MODES = ('starttls', 'tls', 'none')   # none: the mail-guard proxy's plaintext loopback listener
 
 
 @dataclass
@@ -23,7 +26,7 @@ class Account:
     port: int
     user: str
     password: str
-    starttls: bool  # True for Bridge (STARTTLS on 1143), False for implicit TLS (993)
+    tls: str        # "starttls" (Bridge on 1143), "tls" (Gmail on 993), "none" (mail-guard proxy on loopback)
 
 
 def load_account(name: str) -> Account:
@@ -32,17 +35,19 @@ def load_account(name: str) -> Account:
     host = os.environ[f'{p}_IMAP_HOST']
     pw = os.environ.get(f'{p}_PASS', '')
     if not pw: raise SystemExit(f"{p}_PASS is empty — set it in .env before using the {name} account")
-    return Account(name.lower(), host, int(os.environ[f'{p}_IMAP_PORT']),
-                   os.environ[f'{p}_USER'], pw, starttls=host in _LOCAL)
+    tls = os.environ.get(f'{p}_IMAP_TLS') or ('starttls' if host in _LOCAL else 'tls')
+    if tls not in _TLS_MODES: raise SystemExit(f"{p}_IMAP_TLS={tls!r}; expected one of {_TLS_MODES}")
+    return Account(name.lower(), host, int(os.environ[f'{p}_IMAP_PORT']), os.environ[f'{p}_USER'], pw, tls)
 
 
 def connect(acct: Account,
             timeout: float | None = None,  # seconds; None blocks, which is right for bulk fetches
             ) -> imaplib.IMAP4:
     "Open an authenticated IMAP connection to `acct`."
-    if not acct.starttls: M = imaplib.IMAP4_SSL(acct.host, acct.port, timeout=timeout)
+    if acct.tls == 'tls': M = imaplib.IMAP4_SSL(acct.host, acct.port, timeout=timeout)
     else:
         M = imaplib.IMAP4(acct.host, acct.port, timeout=timeout)
+    if acct.tls == 'starttls':
         ctx = ssl.create_default_context()
         if acct.host in _LOCAL:                       # Bridge serves a self-signed cert on loopback
             ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
@@ -73,6 +78,28 @@ def list_folders(M: imaplib.IMAP4) -> list[str]:
     return [line.decode('utf-8', 'replace').rsplit(' "/" ', 1)[-1].strip('"') for line in data if line]
 
 
+def find_sent_folder(M: imaplib.IMAP4) -> str | None:
+    "The mailbox the server flags \\Sent (Gmail names it in the account's language); None when none is flagged."
+    _, data = M.list()
+    for line in data:
+        text = line.decode('utf-8', 'replace') if line else ''
+        if '\\Sent' in text.split(')', 1)[0]: return text.rsplit(' "/" ', 1)[-1].strip('"')
+    return None
+
+
+def list_message_dates(M: imaplib.IMAP4, folder: str,
+                       since: str,  # ISO date, YYYY-MM-DD; messages that arrived that day or later
+                       ) -> list[datetime]:
+    "When each message arrived in `folder`, read-only. Only INTERNALDATE is asked for: no header, subject or body leaves the server."
+    M.select(_quote(folder), readonly=True)
+    _, data = M.uid('search', None, 'SINCE', _imap_date(since))
+    uids = data[0].split() if data and data[0] else []
+    if not uids: return []
+    _, resp = M.uid('fetch', b','.join(uids), '(INTERNALDATE)')
+    found = (re.search(rb'INTERNALDATE "([^"]+)"', line) for line in resp if isinstance(line, bytes))
+    return [datetime.strptime(m.group(1).decode().strip(), '%d-%b-%Y %H:%M:%S %z') for m in found if m]
+
+
 def _fetch_uids(M: imaplib.IMAP4, uids: list[bytes]) -> list[EmailMessage]:
     "Fetch `uids` with their flags. BODY.PEEK so nothing is marked \\Seen."
     if not uids: return []
@@ -100,8 +127,13 @@ def search_messages(M: imaplib.IMAP4,
                     ) -> list[EmailMessage]:
     "Fetch the newest `limit` messages in `folder` matching IMAP SEARCH `criteria`."
     M.select(_quote(folder), readonly=True)
-    try: _, data = M.uid('search', 'UTF-8', *criteria)
-    except imaplib.IMAP4.error: _, data = M.uid('search', None, *criteria)  # server may refuse a charset
+    raw = [i for i, c in enumerate(criteria) if not c.isascii()]
+    if len(raw) > 1: raise SystemExit('search: one accented term per search — imaplib carries a single literal')
+    if raw:                                        # a quoted string is 7-bit only; Gmail refuses UTF-8 in one
+        i = raw[0]; key, val = criteria[i-1], criteria[i]
+        criteria = ['CHARSET', 'UTF-8'] + criteria[:i-1] + criteria[i+1:] + [key]
+        M.literal = val.encode('utf-8')            # imaplib appends it after the last argument
+    _, data = M.uid('search', *criteria)
     return _fetch_uids(M, data[0].split()[-limit:] if data and data[0] else [])
 
 
