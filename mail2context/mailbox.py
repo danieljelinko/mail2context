@@ -12,7 +12,7 @@ from email.parser import BytesParser
 
 from .search import _imap_date, annotate_flags, parse_flags
 
-__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'find_sent_folder', 'list_folders',
+__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'find_sent_folder', 'find_special_folder', 'list_folders',
            'list_message_dates', 'list_uids', 'load_account', 'move_message', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
@@ -78,13 +78,20 @@ def list_folders(M: imaplib.IMAP4) -> list[str]:
     return [line.decode('utf-8', 'replace').rsplit(' "/" ', 1)[-1].strip('"') for line in data if line]
 
 
-def find_sent_folder(M: imaplib.IMAP4) -> str | None:
-    "The mailbox the server flags \\Sent (Gmail names it in the account's language); None when none is flagged."
+def find_special_folder(M: imaplib.IMAP4,
+                        attr: str,  # special-use LIST attribute, e.g. "\\Sent", "\\Drafts"
+                        ) -> str | None:
+    "The mailbox the server flags `attr`; None when none is flagged."
     _, data = M.list()
     for line in data:
         text = line.decode('utf-8', 'replace') if line else ''
-        if '\\Sent' in text.split(')', 1)[0]: return text.rsplit(' "/" ', 1)[-1].strip('"')
+        if attr in text.split(')', 1)[0].lstrip('(').split(): return text.rsplit(' "/" ', 1)[-1].strip('"')
     return None
+
+
+def find_sent_folder(M: imaplib.IMAP4) -> str | None:
+    "The mailbox the server flags \\Sent (Gmail names it in the account's language); None when none is flagged."
+    return find_special_folder(M, '\\Sent')
 
 
 def list_message_dates(M: imaplib.IMAP4, folder: str,

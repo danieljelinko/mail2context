@@ -1,6 +1,7 @@
 # mail2context — entry points for mail operations.
 # Every recipe is safe to run: reads are read-only (BODY.PEEK, never sets \Seen),
-# and the only write is `draft`, which appends to Drafts and never sends (D-003).
+# and the writes are `draft`/`compose`, which append to Drafts and never send (D-003), and
+# `draft-delete`, which removes one draft by UID from Drafts only (D-022).
 
 set positional-arguments   # so `search` can pass "$@" and keep a quoted multi-word value whole
 
@@ -91,6 +92,14 @@ draft-all key body account="proton" limit="400":
 # Create a reply draft in Drafts. Args are POSITIONAL: KEY then BODY file. Never sends.
 draft key body account="proton" limit="400":
     @{{_m2c}} draft {{key}} --file {{body}} --account {{account}} --limit {{limit}}
+
+# List the Drafts folder: UID, Paris time, To, Subject, first body line. Read-only. Gives the UID for draft-delete.
+draft-list account="proton":
+    @{{_m2c}} draft-list --account {{account}}
+
+# MUTATING: delete ONE draft from Drafts by UID, after showing it and asking. Flags after account: --dry-run, --yes
+draft-delete uid account="proton" *flags="":
+    @{{_m2c}} draft-delete {{uid}} --account {{account}} {{flags}}
 
 # --- verification -----------------------------------------------------------
 
