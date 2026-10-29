@@ -108,6 +108,13 @@ a bounded time. The code stays; the guarantee moved out of the repo.
 - [x] Compared (a) draft + the provider web UI's own schedule-send with (b) a guard-side approved queue
 - [x] Owner chose (a): no code; the `mail` skill tells the agent to draft and hand over the schedule step
 
+## Track D — delete an agent-made draft (D-022, 2026-10-29)
+- [x] `just draft-list [account]` — read-only; UID, Paris time, To, Subject, first body line
+- [x] `just draft-delete UID [account] [--dry-run|--yes]` — Drafts only, `\Draft` only, UID STORE + UID EXPUNGE
+- [x] `just draft` / `just compose` print `draft uid: N`
+- [x] Live round-trip on Proton and Gmail with throwaway drafts
+- [ ] Live check at guard levels 1 (refused) and 2 (deletes), once the guard is installed
+
 ## Later — attachment contents (split out of Phase 3, D-016)
 - [ ] Surface attachment *contents*, not just filenames: decide formats (txt/pdf/docx), where the
       extracted text goes, size limits. Own phase after Phase 6; needs no send capability.

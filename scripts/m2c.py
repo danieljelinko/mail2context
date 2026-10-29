@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"mail2context CLI. Read mail, rebuild threads, render context, draft replies. Never sends."
+"mail2context CLI. Read mail, rebuild threads, render context, draft replies, delete a draft by UID. Never sends."
 import argparse
 import imaplib
 import re
@@ -7,10 +7,12 @@ import ssl
 import sys
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
+from mail2context.drafts import delete_draft, format_draft_row, list_drafts, parse_appenduid
 from mail2context.compose import build_message, build_reply, list_participants
 from mail2context.guard import describe_guard
 from mail2context.markdown_mail import render_markdown
@@ -23,6 +25,7 @@ from mail2context.thread import group_threads, message_id, sent_at, thread_key
 ROOT = Path(__file__).resolve().parent.parent
 DRAFTS   = {'proton': 'Drafts',   'gmail': '[Gmail]/Drafts'}
 ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}   # Gmail namespaces its system folders
+TZ = ZoneInfo('Europe/Paris')                                    # the owner's clock, for draft dates
 
 
 def _signature(a) -> tuple[str | None, str | None]:
@@ -211,7 +214,7 @@ def cmd_draft(a):
         print(f"OMITTED : {', '.join(omitted)}")
         print("          this thread has other participants — pass --all to copy them in")
     if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); M.logout(); return
-    print("result  :", append_draft(M, a.drafts or DRAFTS[a.account], msg))
+    _print_append(append_draft(M, a.drafts or DRAFTS[a.account], msg))
     M.logout()
 
 
@@ -228,8 +231,41 @@ def cmd_compose(a):
     print(f"subject : {msg['Subject']}\nthreaded: (new conversation)")
     if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); return
     M = connect(acct)
-    print("result  :", append_draft(M, a.drafts or DRAFTS[a.account], msg))
+    _print_append(append_draft(M, a.drafts or DRAFTS[a.account], msg))
     M.logout()
+
+
+def _print_append(result: str) -> None:
+    "The server's APPEND answer, then the UID on a line of its own for `draft-list` / `draft-delete`."
+    print("result  :", result)
+    uid = parse_appenduid(result)
+    if uid is not None: print(f"draft uid: {uid}")
+
+
+def cmd_draft_list(a):
+    "List the Drafts folder: UID, Paris time, To, Subject, first body line. Read-only."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    M = connect(load_account(a.account))
+    drafts = list_drafts(M)
+    print(f"{len(drafts)} drafts on {a.account}\n")
+    for d in drafts: print(format_draft_row(d, TZ))
+    M.logout()
+
+
+def cmd_draft_delete(a):
+    "Delete ONE draft from the Drafts folder by UID, after showing it. Never touches another folder."
+    load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+    def confirm(d) -> bool:
+        print(format_draft_row(d, TZ))
+        if a.dry_run: print("\n--- dry run, nothing deleted ---"); return False
+        if a.yes: return True
+        try: return input(f"\ndelete draft uid {d.uid}? [y/N] ").strip().lower() in ('y', 'yes')
+        except EOFError: return False                  # no terminal: never assume yes
+    M = connect(load_account(a.account))
+    deleted = delete_draft(M, a.uid, confirm)
+    M.logout()
+    if deleted:         print(f"deleted draft uid {a.uid} on {a.account}")
+    elif not a.dry_run: print("not deleted")
 
 
 def cmd_md2html(a):
@@ -316,6 +352,14 @@ def main():
     c.add_argument('--no-signature', action='store_true')
     c.set_defaults(fn=cmd_compose)
 
+    dl = sub.add_parser('draft-list', help=cmd_draft_list.__doc__); dl.add_argument('--account', default='proton')
+    dl.set_defaults(fn=cmd_draft_list)
+    dd = sub.add_parser('draft-delete', help=cmd_draft_delete.__doc__)
+    dd.add_argument('uid', type=int); dd.add_argument('--account', default='proton')
+    dd.add_argument('--yes', action='store_true', help='skip the confirmation prompt (scripted use)')
+    dd.add_argument('--dry-run', action='store_true', help='show what would be deleted; write nothing')
+    dd.set_defaults(fn=cmd_draft_delete)
+
     h = sub.add_parser('md2html', help=cmd_md2html.__doc__)
     h.add_argument('--file', required=True); h.add_argument('--out')
     h.add_argument('--no-signature', action='store_true'); h.set_defaults(fn=cmd_md2html)
@@ -325,7 +369,7 @@ def main():
     # `just --list` prints signatures like `draft key body account="proton"`, which read as if
     # name=value were valid. just arguments are positional, so those arrive here as literals.
     for arg in sys.argv[1:]:
-        if re.fullmatch(r'(account|limit|show|folder|out|since|body|key|sender|term)=.*', arg):
+        if re.fullmatch(r'(account|limit|show|folder|out|since|body|key|sender|term|uid)=.*', arg):
             p.error(f"got the literal {arg!r} — `just` arguments are POSITIONAL, not name=value.\n"
                     f"       `just --list` shows defaults, not syntax to copy.\n"
                     f"       Try: just draft <KEY> <BODY-FILE>   (then optionally <account> <limit>)")
