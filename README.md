@@ -59,6 +59,8 @@ just accounts           # confirms both authenticate
 | `just draft KEY body.md` | append the reply to **Drafts** — never sends |
 | `just draft-all KEY body.md` | same, but Cc everyone else in the thread |
 | `just compose TO SUBJECT body.md` | draft a NEW conversation, not a reply |
+| `just draft-list [account]` | list Drafts: UID, Paris time, To, Subject, first body line |
+| `just draft-delete UID [account] [--dry-run\|--yes]` | delete **one** draft by UID, from Drafts only, after asking — permanent, no Trash copy |
 | `just md2html body.md` | print the exact HTML that would be mailed |
 | `just md-preview body.md` | write that HTML to a file you can open in a browser |
 | `just audit [account] [limit]` | measure conversion loss; exits non-zero if anything is lost |
@@ -112,8 +114,9 @@ twice.
 `draft key body account="proton"` — those `name="value"` parts are *defaults*, not syntax to
 type. Write `just draft 9cb987c4 reply.md`, optionally `just draft 9cb987c4 reply.md gmail 900`.
 
-Reads use `BODY.PEEK`, so nothing is ever marked as read. The only writes are `just draft` and
-`just draft-all`.
+Reads use `BODY.PEEK`, so nothing is ever marked as read. The only writes are `just draft`,
+`just draft-all` and `just compose` (append to Drafts), and `just draft-delete`, which removes one
+draft by the UID that `draft` prints as `draft uid: N` (D-022).
 
 A reply goes to the **last sender** only. Any other participants are listed as `OMITTED` in the
 preview — check that line before drafting, and use `draft-all` to copy them in.

@@ -10,6 +10,7 @@
   to the two `m2c content 318ecf` copies → `just content-quotes 318ecf`; screenshots of both rendered copies.
 
 ## Next
+- Once mail-guard is installed: `just draft-delete` at level 1 must print the guard refusal; at level 2 it deletes.
 - Live matrix at levels 1, 2, 3 once installed; then Phase 4 at level 1 (D-018 allows `\Answered`).
 - Phase 6 as rewritten (D-021): drop the TEMPORARY markers once the guard is live.
 - Attachment *contents* (D-016), after Phase 6.
@@ -28,6 +29,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-10-29 | `just draft-list` / `just draft-delete UID` (D-022); `draft`/`compose` print `draft uid: N` | 136 tests (was 121): refusal outside Drafts (UID present only in INBOX, INBOX never opened), unknown UID, non-`\Draft`, no UIDPLUS, guard NO naming level 2, decline/dry-run writes nothing, delete spares an already-`\Deleted` neighbour (fails if swapped for bare EXPUNGE). Live: throwaway `test draft-delete` drafts Proton UID 199 and Gmail UID 65745 — dry-run left each in place, `--yes` removed each, unknown UID 999999 refused; neither went to Trash/Bin (permanent). Guard-level-1 refusal not live-tested: guard not installed |
 | 2026-09-19 | Multi-word and accented searches work; `just search` keeps quoted args whole | 121 tests (was 115): quoting, UTF-8 literal placed last, two-literal refusal against a plaintext fake; live on Bridge: `about "47 RUE DE SÉLESTAT / DEUXIEME ETAGE"` finds the thread. Four learnings rows; `mail` skill gained a search-semantics section and a worked example |
 | 2026-09-17 | Built `mail-guard` (separate repo) and the guard mode of mail2context; decided D-018..D-021 with the owner | mail-guard: 89 tests via real `imaplib`/`smtplib` against asyncio fakes incl. TLS upstreams; mail2context: 115 tests, `just guard-status` reports direct mode with both accounts OK; merged `feat/content-roundtrip` to `main` and pushed as the owner chose |
 | 2026-09-17 | Designed the three-level `mail-guard` with the owner; handoff + launch prompt for it and the scheduled-send study | D-017; Track G and Track S in `01_plan.md`; verified the agent has no passwordless sudo and that smtp.gmail.com:587 is reachable from its shell today |
