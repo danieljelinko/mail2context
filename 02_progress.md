@@ -1,7 +1,6 @@
 # Progress
 
 ## In flight
-- **Draft-attachment test drafts to delete when Dani says:** Proton uid 217 (2 attachments) and 218 (5 MB probe); Gmail uid 65831 and 65832.
 - **Track G — `mail-guard` built, install pending the owner.** `~/Work/tools/mail-guard` at `2d89c19`:
   89 tests green, Ruff clean. mail2context on `feat/guard-mode` (`main` was fast-forwarded to `539abf3`
   and pushed): `*_IMAP_TLS` / `*_SMTP_TLS` options, `just guard-status`, 115 tests. The owner runs
@@ -30,6 +29,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-11-06 | Deleted the attachment test drafts at the owner's request | `draft-delete --dry-run` showed each row, then `--yes`: Proton 217, 218; Gmail 65831, 65832 |
 | 2026-11-06 | Merged `feat/draft-attachments` into `main` and pushed, as the owner chose | Owner confirmed Proton drafts 217 and 218 show their attachments in the web UI |
 | 2026-11-06 | `--attach` on `compose`/`draft`, `just compose-attach` / `draft-attach` (+ `-preview`), D-023 | 150 tests (was 136), red first: bytes/basename/accents, MIME guess + fallback, empty list, missing file, folder in name order, empty folder, CLI dry-run lists sizes against a refused port. Live read-back by filename + sha256: Proton 217/218, Gmail 65831/65832 (incl. a 5 MB file). `just check` green, 0 loss |
 | 2026-10-29 | Merged `feat/draft-delete` into `main` and pushed, as the owner chose | `git log origin/main` shows the merge; launch prompt `261029_0829__launch_prompt_draft_delete.md` committed with it |
