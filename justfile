@@ -1,6 +1,6 @@
 # mail2context — entry points for mail operations.
 # Every recipe is safe to run: reads are read-only (BODY.PEEK, never sets \Seen),
-# and the writes are `draft`/`compose`, which append to Drafts and never send (D-003), and
+# and the writes are `draft`/`compose` (and their `-attach` forms), which append to Drafts and never send (D-003), and
 # `draft-delete`, which removes one draft by UID from Drafts only (D-022).
 
 set positional-arguments   # so `search` can pass "$@" and keep a quoted multi-word value whole
@@ -118,6 +118,22 @@ compose to subject body account="proton":
 # Preview a new conversation without writing it
 compose-preview to subject body account="proton":
     @{{_m2c}} compose --to "{{to}}" --subject "{{subject}}" --file {{body}} --account {{account}} --dry-run
+
+# MUTATING: draft a NEW conversation with files attached. Positional: TO SUBJECT BODY ACCOUNT, then files and/or folders (a folder attaches its files in name order)
+compose-attach to subject body account +paths:
+    @shift 4; {{_m2c}} compose --to "{{to}}" --subject "{{subject}}" --file "{{body}}" --account {{account}} --attach "$@"
+
+# Preview compose-attach without writing it: lists each attachment, its size and the total. No network.
+compose-attach-preview to subject body account +paths:
+    @shift 4; {{_m2c}} compose --to "{{to}}" --subject "{{subject}}" --file "{{body}}" --account {{account}} --attach "$@" --dry-run
+
+# MUTATING: reply draft with files attached. Positional: KEY BODY ACCOUNT LIMIT, then files and/or folders
+draft-attach key body account limit +paths:
+    @shift 4; {{_m2c}} draft {{key}} --file "{{body}}" --account {{account}} --limit {{limit}} --attach "$@"
+
+# Preview draft-attach without writing it (still reads the thread)
+draft-attach-preview key body account limit +paths:
+    @shift 4; {{_m2c}} draft {{key}} --file "{{body}}" --account {{account}} --limit {{limit}} --attach "$@" --dry-run
 
 # Full control over a draft: --to "a@x, b@y" --all --file BODY --dry-run --account --limit
 draft-args *args:

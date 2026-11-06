@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
 from mail2context.drafts import delete_draft, format_draft_row, list_drafts, parse_appenduid
-from mail2context.compose import build_message, build_reply, list_participants
+from mail2context.compose import (build_message, build_reply, describe_attachments, expand_attachment_paths,
+                                  list_participants)
 from mail2context.guard import describe_guard
 from mail2context.markdown_mail import render_markdown
 from mail2context.mailbox import (append_draft, check_account, connect, fetch_recent, find_sent_folder,
@@ -34,6 +35,12 @@ def _signature(a) -> tuple[str | None, str | None]:
     txt, html = ROOT / 'signature.txt', ROOT / 'signature.html'
     return (txt.read_text() if txt.exists() else None,
             html.read_text() if html.exists() else None)
+
+
+def _attachments(a) -> list[Path]:
+    "The files `--attach` names, folders expanded in name order. Exits on a missing path before any connection."
+    try: return expand_attachment_paths([Path(x) for x in a.attach])
+    except (FileNotFoundError, ValueError) as e: raise SystemExit(f"m2c: {e}") from None
 
 
 def _folder(a) -> str:
@@ -198,13 +205,14 @@ def cmd_export(a):
 
 def cmd_draft(a):
     "Create a reply draft on the thread. Appends to Drafts; never sends (D-003)."
+    files = _attachments(a)                        # a missing file fails before the thread is fetched
     M, threads = _load(a.account, _folder(a), a.limit)
     t = _pick(threads, a.key)
     body = Path(a.file).read_text() if a.file else sys.stdin.read()
     acct = load_account(a.account)
     sig_t, sig_h = _signature(a)
     msg = build_reply(t, body=body, frm=acct.user, to=a.to, reply_all=a.all,
-                      markdown=not a.plain, signature_text=sig_t, signature_html=sig_h)
+                      markdown=not a.plain, signature_text=sig_t, signature_html=sig_h, attachments=files)
     addressed = {x.strip().lower() for x in f"{msg['To']},{msg['Cc'] or ''}".split(',') if x.strip()}
     omitted = [w for w in list_participants(t, acct.user) if w.lower() not in addressed]
     print(f"draft to: {msg['To']}")
@@ -213,6 +221,7 @@ def cmd_draft(a):
     if omitted:
         print(f"OMITTED : {', '.join(omitted)}")
         print("          this thread has other participants — pass --all to copy them in")
+    if files: print('\n'.join(describe_attachments(files)))
     if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); M.logout(); return
     _print_append(append_draft(M, a.drafts or DRAFTS[a.account], msg))
     M.logout()
@@ -222,13 +231,15 @@ def cmd_compose(a):
     "Draft a NEW conversation to chosen recipients. Appends to Drafts; never sends."
     load_dotenv(Path(__file__).resolve().parent.parent / '.env')
     acct = load_account(a.account)
+    files = _attachments(a)
     body = Path(a.file).read_text() if a.file else sys.stdin.read()
     sig_t, sig_h = _signature(a)
     msg = build_message(to=a.to, subject=a.subject, body=body, frm=acct.user, cc=a.cc,
-                        markdown=not a.plain, signature_text=sig_t, signature_html=sig_h)
+                        markdown=not a.plain, signature_text=sig_t, signature_html=sig_h, attachments=files)
     print(f"draft to: {msg['To']}")
     if msg['Cc']: print(f"cc      : {msg['Cc']}")
     print(f"subject : {msg['Subject']}\nthreaded: (new conversation)")
+    if files: print('\n'.join(describe_attachments(files)))
     if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); return
     M = connect(acct)
     _print_append(append_draft(M, a.drafts or DRAFTS[a.account], msg))
@@ -341,6 +352,8 @@ def main():
     d.add_argument('--all', action='store_true', help='Cc everyone else in the thread')
     d.add_argument('--plain', action='store_true', help='do not interpret the body as markdown')
     d.add_argument('--no-signature', action='store_true')
+    d.add_argument('--attach', action='extend', nargs='+', default=[], metavar='PATH',
+                   help='file to attach, or a folder to attach whole (name order); repeatable')
     d.set_defaults(fn=cmd_draft)
 
     c = sub.add_parser('compose', help=cmd_compose.__doc__)
@@ -350,6 +363,8 @@ def main():
     c.add_argument('--dry-run', action='store_true')
     c.add_argument('--plain', action='store_true', help='do not interpret the body as markdown')
     c.add_argument('--no-signature', action='store_true')
+    c.add_argument('--attach', action='extend', nargs='+', default=[], metavar='PATH',
+                   help='file to attach, or a folder to attach whole (name order); repeatable')
     c.set_defaults(fn=cmd_compose)
 
     dl = sub.add_parser('draft-list', help=cmd_draft_list.__doc__); dl.add_argument('--account', default='proton')

@@ -92,12 +92,12 @@ def _send_step(n: int, run_id: str, prev, dry_run: bool):
     if prev is None:
         msg = build_message(to=ADDR[OTHER[sender]], subject=_subject(run_id),
                             body=_body(run_id, n), frm=ADDR[sender],
-                            signature_text=sig_t, signature_html=sig_h)
+                            signature_text=sig_t, signature_html=sig_h, attachments=[])
     else:
         # Let build_reply derive To/Subject/In-Reply-To from the delivered message, exactly as a
         # real reply does — that is the production logic under test, not a fixture.
         msg = build_reply([prev], body=_body(run_id, n), frm=ADDR[sender],
-                          signature_text=sig_t, signature_html=sig_h)
+                          signature_text=sig_t, signature_html=sig_h, attachments=[])
         if n == 4:   # an autoresponder stacking a prefix, so step 5 really has one to collapse
             msg.replace_header('Subject', f"Auto: {msg['Subject']}")
     approved = check_recipients(msg)              # printed BEFORE anything leaves the machine
@@ -184,7 +184,7 @@ def break_chain(run_id: str, dry_run: bool) -> None:
     prev = _wait_for('proton', run_id, STEPS, timeout=30)
     sig_t, sig_h = _signature()
     msg = build_reply([prev], body=_body(run_id, STEPS + 1), frm=ADDR['proton'],
-                      signature_text=sig_t, signature_html=sig_h)
+                      signature_text=sig_t, signature_html=sig_h, attachments=[])
     del msg['In-Reply-To'], msg['References']      # the deliberate break
     approved = check_recipients(msg)
     print(f"  step {STEPS + 1}  proton -> {', '.join(approved)}  (In-Reply-To and References REMOVED)")
@@ -254,7 +254,7 @@ def _csend(run_id: str, sender: str, dry_run: bool) -> dict | None:
     sig_t, sig_h = _signature()
     msg = build_message(to=ADDR[OTHER[sender]], subject=_csubject(run_id),
                         body=content_body(_ctoken(run_id, sender)), frm=ADDR[sender],
-                        signature_text=sig_t, signature_html=sig_h)
+                        signature_text=sig_t, signature_html=sig_h, attachments=[])
     name, data = _cattachment(run_id, sender)
     msg.add_attachment(data, maintype='text', subtype='plain', filename=name)
     digest = hashlib.sha256(data).hexdigest()

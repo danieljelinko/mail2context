@@ -1,12 +1,14 @@
 "Compose replies as RFC 5322 messages. Drafts only — nothing here sends (D-003)."
 import html as _html
+import mimetypes
 import re
 from email.message import EmailMessage
 from email.utils import formatdate, getaddresses, make_msgid
+from pathlib import Path
 
 from .markdown_mail import render_markdown
 
-__all__ = ['build_message', 'build_reply', 'list_participants']
+__all__ = ['build_message', 'build_reply', 'describe_attachments', 'expand_attachment_paths', 'list_participants']
 
 # Autoresponders and forwards stack markers onto the subject; strip them all, then add one Re:.
 _NOISE_PREFIX = re.compile(r'^\s*((re|fwd?|tr|auto|automatic reply)\s*:\s*)+', re.I)
@@ -31,6 +33,37 @@ def _set_body(m: EmailMessage,
     html = render_markdown(body) if markdown else _as_html(body)
     if sig_html: html += f'\n{sig_html.strip()}'
     m.add_alternative(html, subtype='html')
+
+
+def _attach_files(m: EmailMessage, paths: list[Path]) -> None:
+    "Attach each file under its basename, typed from its extension (octet-stream when unknown)."
+    for p in map(Path, paths):
+        ctype = mimetypes.guess_type(p.name)[0] or 'application/octet-stream'
+        maintype, subtype = ctype.split('/', 1)
+        m.add_attachment(p.read_bytes(), maintype=maintype, subtype=subtype, filename=p.name)
+
+
+def expand_attachment_paths(paths: list[Path]) -> list[Path]:  # files, or folders to attach whole
+    "Files as given; a folder becomes its files in name order. Fails on a missing path or an empty folder."
+    out = []
+    for p in map(Path, paths):
+        if not p.exists(): raise FileNotFoundError(f"attachment not found: {p}")
+        if not p.is_dir(): out.append(p); continue
+        files = sorted((f for f in p.iterdir() if f.is_file()), key=lambda f: f.name)
+        if not files: raise ValueError(f"no files to attach in folder {p}")
+        out += files
+    return out
+
+
+def _format_size(n: int) -> str: return f"{n} B" if n < 1024 else f"{n/1024:.1f} KB" if n < 1024**2 else f"{n/1024**2:.1f} MB"
+
+
+def describe_attachments(paths: list[Path]) -> list[str]:
+    "One line per file with its size, then the count and total, for previews."
+    sizes = [(p.name, p.stat().st_size) for p in map(Path, paths)]
+    total = sum(n for _, n in sizes)
+    return ([f"attach  : {name} ({_format_size(n)})" for name, n in sizes] +
+            [f"attached: {len(sizes)} files, {_format_size(total)} (base64 on the wire: ~{_format_size(total*4//3)})"])
 
 
 def _reply_subject(subj: str) -> str:
@@ -63,6 +96,8 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
                 markdown: bool = True,       # render the body as markdown
                 signature_text: str | None = None,
                 signature_html: str | None = None,
+                *,
+                attachments: list[Path],     # files to attach; [] for none
                 ) -> EmailMessage:
     "Build a reply to the last message of `thread`, threaded via In-Reply-To/References."
     last = thread[-1]
@@ -85,6 +120,7 @@ def build_reply(thread: list[EmailMessage],  # ordered oldest-first
     refs = _reply_refs(last)
     if refs: m['References'] = refs
     _set_body(m, body, markdown, signature_text, signature_html)
+    _attach_files(m, attachments)
     return m
 
 
@@ -95,7 +131,9 @@ def build_message(to: str,        # one address, or several comma-separated
                   cc: str | None = None,
                   markdown: bool = True,
                   signature_text: str | None = None,
-                  signature_html: str | None = None) -> EmailMessage:
+                  signature_html: str | None = None,
+                  *,
+                  attachments: list[Path]) -> EmailMessage:  # files to attach; [] for none
     "Build a new message that threads to nothing — a fresh conversation, not a reply."
     m = EmailMessage()
     m['From'], m['To'], m['Subject'] = frm, to, subject
@@ -103,4 +141,6 @@ def build_message(to: str,        # one address, or several comma-separated
     m['Date'] = formatdate(localtime=True)
     m['Message-ID'] = make_msgid()
     _set_body(m, body, markdown, signature_text, signature_html)
+    _attach_files(m, attachments)
     return m
+
