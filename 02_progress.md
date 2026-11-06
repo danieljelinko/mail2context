@@ -1,6 +1,7 @@
 # Progress
 
 ## In flight
+- **Draft-attachment test drafts to delete when Dani says:** Proton uid 217 (2 attachments) and 218 (5 MB probe); Gmail uid 65831 and 65832.
 - **Track G — `mail-guard` built, install pending the owner.** `~/Work/tools/mail-guard` at `2d89c19`:
   89 tests green, Ruff clean. mail2context on `feat/guard-mode` (`main` was fast-forwarded to `539abf3`
   and pushed): `*_IMAP_TLS` / `*_SMTP_TLS` options, `just guard-status`, 115 tests. The owner runs
@@ -29,6 +30,8 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-11-06 | Merged `feat/draft-attachments` into `main` and pushed, as the owner chose | Owner confirmed Proton drafts 217 and 218 show their attachments in the web UI |
+| 2026-11-06 | `--attach` on `compose`/`draft`, `just compose-attach` / `draft-attach` (+ `-preview`), D-023 | 150 tests (was 136), red first: bytes/basename/accents, MIME guess + fallback, empty list, missing file, folder in name order, empty folder, CLI dry-run lists sizes against a refused port. Live read-back by filename + sha256: Proton 217/218, Gmail 65831/65832 (incl. a 5 MB file). `just check` green, 0 loss |
 | 2026-10-29 | Merged `feat/draft-delete` into `main` and pushed, as the owner chose | `git log origin/main` shows the merge; launch prompt `261029_0829__launch_prompt_draft_delete.md` committed with it |
 | 2026-10-29 | `just draft-list` / `just draft-delete UID` (D-022); `draft`/`compose` print `draft uid: N` | 136 tests (was 121): refusal outside Drafts (UID present only in INBOX, INBOX never opened), unknown UID, non-`\Draft`, no UIDPLUS, guard NO naming level 2, decline/dry-run writes nothing, delete spares an already-`\Deleted` neighbour (fails if swapped for bare EXPUNGE). Live: throwaway `test draft-delete` drafts Proton UID 199 and Gmail UID 65745 — dry-run left each in place, `--yes` removed each, unknown UID 999999 refused; neither went to Trash/Bin (permanent). Guard-level-1 refusal not live-tested: guard not installed |
 | 2026-09-19 | Multi-word and accented searches work; `just search` keeps quoted args whole | 121 tests (was 115): quoting, UTF-8 literal placed last, two-literal refusal against a plaintext fake; live on Bridge: `about "47 RUE DE SÉLESTAT / DEUXIEME ETAGE"` finds the thread. Four learnings rows; `mail` skill gained a search-semantics section and a worked example |

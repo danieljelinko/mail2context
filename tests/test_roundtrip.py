@@ -177,7 +177,7 @@ def make_rich_pair():
     def _build(mutate=None) -> tuple[EmailMessage, EmailMessage]:
         sent = build_message(to='daniel.jelinko@gmail.com', subject='m2c content zz9',
                              body=content_body('m2c-ct-zz9-from-proton'), frm='dj@ai4hu.org',
-                             signature_text=SIG_TEXT, signature_html=SIG_HTML)
+                             signature_text=SIG_TEXT, signature_html=SIG_HTML, attachments=[])
         raw = sent.as_bytes()
         if mutate: raw = mutate(raw)
         delivered = BytesParser(policy=policy.default).parsebytes(raw)
