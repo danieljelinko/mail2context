@@ -1,6 +1,9 @@
 # Progress
 
 ## In flight
+- **Fetch by pointer (`feat/fetch-by-pointer`, D-025)** — built and tested; live read-only checks on Dani's own
+  round-trip mail passed. Waiting on Dani: a named message per account for the done-criteria check, a named
+  message for one live `draft-to` (then `draft-delete` it), leave to edit the `mail` skill, merge/push.
 - **Track G — `mail-guard` built, install pending the owner.** `~/Work/tools/mail-guard` at `2d89c19`:
   89 tests green, Ruff clean. mail2context on `feat/guard-mode` (`main` was fast-forwarded to `539abf3`
   and pushed): `*_IMAP_TLS` / `*_SMTP_TLS` options, `just guard-status`, 115 tests. The owner runs
@@ -29,6 +32,8 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-11-13 | `just message` / `thread-of` / `draft-to`; Drafts by special-use in `draft`/`compose`; D-025 | 175 tests (was 153), red first: pointer hit, stale UIDVALIDITY → Message-ID, UID gone → All Mail, missing, duplicate copies, several pointers one connection, no `\All` refusal, thread-of by headers and by `X-GM-THRID`, `draft` to a `\Drafts` folder named Brouillons, refusal with no APPEND. Live on round-trip `91fcac` (own mail), both accounts: pointer, stale pointer, gone UID, Message-ID, several, missing; `thread-of` 6/6 on Proton (~5 s), Gmail's conversation 6 but a different six (learnings). `\Seen` untouched on an unread message per account |
+| 2026-11-13 | Merged `feat/header-read`; its D-023 renumbered D-024 (main's D-023 is attachments) | Doc-row conflicts only; `just check` green, 153 tests, 0 loss |
 | 2026-11-06 | Deleted the attachment test drafts at the owner's request | `draft-delete --dry-run` showed each row, then `--yes`: Proton 217, 218; Gmail 65831, 65832 |
 | 2026-11-06 | Merged `feat/draft-attachments` into `main` and pushed, as the owner chose | Owner confirmed Proton drafts 217 and 218 show their attachments in the web UI |
 | 2026-11-06 | `--attach` on `compose`/`draft`, `just compose-attach` / `draft-attach` (+ `-preview`), D-023 | 150 tests (was 136), red first: bytes/basename/accents, MIME guess + fallback, empty list, missing file, folder in name order, empty folder, CLI dry-run lists sizes against a refused port. Live read-back by filename + sha256: Proton 217/218, Gmail 65831/65832 (incl. a 5 MB file). `just check` green, 0 loss |

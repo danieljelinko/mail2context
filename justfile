@@ -75,7 +75,23 @@ export-raw key account="proton" limit="400" out="" folder="":
 # Export BOTH variants of a thread, for side-by-side verification
 export-both key account="proton" limit="400": (export key account limit) (export-raw key account limit)
 
+# One message by pointer and/or Message-ID (repeatable), read-only: --pointer 'imap://…' --message-id '<…>' [--json] [--raw]. Says which lookup answered
+message account *args:
+    @shift 1; {{_m2c}} message --account {{account}} "$@"
+
+# The thread around one message, by server-side search (Gmail: X-GM-THRID), not a recent window. Read-only: --message-id '<…>' [--raw]
+thread-of account *args:
+    @shift 1; {{_m2c}} thread-of --account {{account}} "$@"
+
 # --- writing (drafts only — nothing is ever sent) ---------------------------
+
+# Preview a reply to ONE message without writing it: --message-id '<…>' (or --pointer 'imap://…') BODY [--all] [--to …]
+draft-to-preview account *args:
+    @shift 1; {{_m2c}} draft-to --account {{account}} "$@" --dry-run
+
+# MUTATING: append a reply to ONE message to Drafts (found by special-use). Never sends. Same args as draft-to-preview
+draft-to account *args:
+    @shift 1; {{_m2c}} draft-to --account {{account}} "$@"
 
 # Preview a reply draft without writing it. Args are POSITIONAL: KEY then BODY file.
 draft-preview key body account="proton" limit="400":
