@@ -1,7 +1,6 @@
 # Progress
 
 ## In flight
-- **Fetch by pointer (`feat/fetch-by-pointer`, D-025)** — done and verified live; awaiting Dani's choice to merge/push.
 - **Track G — `mail-guard` built, install pending the owner.** `~/Work/tools/mail-guard` at `2d89c19`:
   89 tests green, Ruff clean. mail2context on `feat/guard-mode` (`main` was fast-forwarded to `539abf3`
   and pushed): `*_IMAP_TLS` / `*_SMTP_TLS` options, `just guard-status`, 115 tests. The owner runs
@@ -30,6 +29,7 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-11-13 | Merged `feat/fetch-by-pointer` (incl. `feat/header-read`) into `main` and pushed, as the owner chose | 175 tests + lint green on `main` after the merge; launch prompt committed with it |
 | 2026-11-13 | Live `draft-to` on round-trip `91fcac` message 3, both accounts, test drafts deleted; `mail` skill gained the new recipes | Owner named `91fcac` as the check messages. Read back: Proton draft 255 without `In-Reply-To` (D-009), Gmail draft 65895 with it and with References; each `draft-delete --dry-run` then `--yes`. Skill edited with the owner's leave |
 | 2026-11-13 | `just message` / `thread-of` / `draft-to`; Drafts by special-use in `draft`/`compose`; D-025 | 175 tests (was 153), red first: pointer hit, stale UIDVALIDITY → Message-ID, UID gone → All Mail, missing, duplicate copies, several pointers one connection, no `\All` refusal, thread-of by headers and by `X-GM-THRID`, `draft` to a `\Drafts` folder named Brouillons, refusal with no APPEND. Live on round-trip `91fcac` (own mail), both accounts: pointer, stale pointer, gone UID, Message-ID, several, missing; `thread-of` 6/6 on Proton (~5 s), Gmail's conversation 6 but a different six (learnings). `\Seen` untouched on an unread message per account |
 | 2026-11-13 | Merged `feat/header-read`; its D-023 renumbered D-024 (main's D-023 is attachments) | Doc-row conflicts only; `just check` green, 153 tests, 0 loss |
