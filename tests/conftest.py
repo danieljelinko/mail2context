@@ -13,6 +13,7 @@ class FakeMailbox:
     capabilities: str = 'IMAP4rev1 UIDPLUS MOVE'
     refuse: dict[str, str] = field(default_factory=dict)      # verb ('UID STORE', 'EXPUNGE'…) -> text after NO
     seen: list[bytes] = field(default_factory=list)           # every raw command line, in order
+    uidvalidity: int = 7
 
 
 def _uid_set(spec: str, uids: list[int]) -> list[int]:
@@ -47,6 +48,9 @@ def _serve(c: socket.socket, box: FakeMailbox) -> None:
             sel = args.strip('"')
             if sel not in box.folders: send(f'{tag} NO no such mailbox\r\n'); sel = None; continue
             send(f'* {len(box.folders[sel])} EXISTS\r\n{tag} OK [READ-WRITE] done\r\n')
+        elif verb == 'STATUS':
+            name = args.rsplit(' (', 1)[0].strip('"')
+            send(f'* STATUS "{name}" (UIDVALIDITY {box.uidvalidity} UIDNEXT {max(box.folders[name], default=0) + 1})\r\n{tag} OK done\r\n')
         elif verb == 'UID SEARCH':
             m = re.match(r'UID (\S+)', args)
             hits = _uid_set(m.group(1), list(msgs)) if m else sorted(msgs)

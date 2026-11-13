@@ -12,11 +12,12 @@ from email.parser import BytesParser
 
 from .search import _imap_date, annotate_flags, parse_flags
 
-__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'find_sent_folder', 'find_special_folder', 'list_folders',
-           'list_message_dates', 'list_uids', 'load_account', 'move_message', 'search_messages']
+__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_headers', 'fetch_recent', 'find_sent_folder', 'find_special_folder', 'list_folders',
+           'list_message_dates', 'list_uids', 'load_account', 'move_message', 'read_folder_state', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
 _TLS_MODES = ('starttls', 'tls', 'none')   # none: the mail-guard proxy's plaintext loopback listener
+_HEADER_BATCH = 1000                       # UIDs per FETCH: keeps a whole-mailbox command line within server limits
 
 
 @dataclass
@@ -117,6 +118,35 @@ def _fetch_uids(M: imaplib.IMAP4, uids: list[bytes]) -> list[EmailMessage]:
         msg = BytesParser(policy=policy.default).parsebytes(part[1])
         annotate_flags(msg, parse_flags(part[0]))
         out.append(msg)
+    return out
+
+
+def read_folder_state(M: imaplib.IMAP4, folder: str) -> tuple[int, int]:
+    "(UIDVALIDITY, UIDNEXT) of `folder`, by STATUS: the folder is not even opened."
+    _, data = M.status(_quote(folder), '(UIDVALIDITY UIDNEXT)')
+    text = data[0].decode('utf-8', 'replace')
+    return int(re.search(r'UIDVALIDITY (\d+)', text).group(1)), int(re.search(r'UIDNEXT (\d+)', text).group(1))
+
+
+def fetch_headers(M: imaplib.IMAP4, folder: str,
+                  after_uid: int,      # only UIDs above this; 0 for all
+                  since: str | None,   # ISO date, YYYY-MM-DD, or None for no bound
+                  fields: list[str],   # header names, e.g. ["MESSAGE-ID", "FROM"]
+                  ) -> list[tuple[int, EmailMessage]]:
+    "(UID, headers) of the messages in `folder` past `after_uid`, read-only, flags annotated. Only `fields` leave the server: no body."
+    M.select(_quote(folder), readonly=True)
+    criteria = ['UID', f'{after_uid + 1}:*'] + (['SINCE', _imap_date(since)] if since else [])
+    _, data = M.uid('search', None, *criteria)
+    uids = [u for u in (data[0].split() if data and data[0] else []) if int(u) > after_uid]  # `n:*` always matches the last message
+    want = f'(UID FLAGS BODY.PEEK[HEADER.FIELDS ({" ".join(fields)})])'
+    out = []
+    for i in range(0, len(uids), _HEADER_BATCH):
+        _, resp = M.uid('fetch', b','.join(uids[i:i + _HEADER_BATCH]), want)
+        for part in resp:
+            if not isinstance(part, tuple): continue
+            msg = BytesParser(policy=policy.default).parsebytes(part[1])
+            annotate_flags(msg, parse_flags(part[0]))
+            out.append((int(re.search(rb'UID (\d+)', part[0]).group(1)), msg))
     return out
 
 

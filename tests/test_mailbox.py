@@ -3,7 +3,9 @@ from collections.abc import Callable
 
 import pytest
 
-from mail2context.mailbox import Account, check_account, connect, find_sent_folder, list_message_dates, load_account, search_messages
+from mail2context.mailbox import (Account, check_account, connect, fetch_headers, find_sent_folder, list_message_dates, load_account,
+                                  read_folder_state, search_messages)
+from mail2context.search import flags_of
 
 
 def _closed_port_account() -> Account:
@@ -208,3 +210,48 @@ def test_list_message_dates_asks_for_arrival_times_only_when_reading_a_folder():
     # Then both times come back with their zone, the folder was opened read-only, and nothing but INTERNALDATE was fetched
     assert [d.isoformat() for d in dates] == ['2026-10-05T09:15:02+02:00', '2026-10-06T18:40:00+00:00']
     assert M.asked == [('select', 'Sent', True), ('search', None, 'SINCE', '05-Oct-2026'), ('fetch', b'7,9', '(INTERNALDATE)')]
+
+
+def _headers(mid: str) -> bytes: return f'Message-ID: <{mid}>\r\nFrom: a@example.org\r\n\r\n'.encode()
+
+
+def test_read_folder_state_returns_uidvalidity_and_uidnext_when_asked_for_a_folder_with_a_space(fake_imap):
+    # Given a mailbox whose name needs quoting
+    port, box = fake_imap(folders={'All Mail': {4: [set(), _headers('a@x')]}}, special={}, uidvalidity=99)
+    M = connect(Account('p', '127.0.0.1', port, 'u', 'x', tls='none'))
+
+    # When we read its state
+    state = read_folder_state(M, 'All Mail')
+
+    # Then both numbers come back and the folder was never selected
+    assert state == (99, 5)
+    assert not any(b'SELECT' in c or b'EXAMINE' in c for c in box.seen)
+
+
+def test_fetch_headers_returns_only_uids_past_the_cursor_when_the_server_echoes_the_last_message(fake_imap):
+    # Given a folder whose newest UID is the cursor itself: `UID 8:*` still matches it
+    port, _ = fake_imap(folders={'INBOX': {3: [set(), _headers('a@x')], 7: [{'\\Draft'}, _headers('b@x')]}}, special={})
+    M = connect(Account('p', '127.0.0.1', port, 'u', 'x', tls='none'))
+
+    # When we fetch past that cursor, then past an older one
+    at_end, past_3 = fetch_headers(M, 'INBOX', 7, '2025-01-01', ['MESSAGE-ID']), fetch_headers(M, 'INBOX', 3, '2025-01-01', ['MESSAGE-ID'])
+
+    # Then the cursor's own message is not returned again, and flags and uid travel with the headers
+    assert at_end == []
+    assert [(u, m['Message-ID'], flags_of(m)) for u, m in past_3] == [(7, '<b@x>', {'\\Draft'})]
+
+
+def test_fetch_headers_selects_read_only_and_peeks_only_the_named_fields_when_reading(fake_imap):
+    # Given a folder with one message
+    port, box = fake_imap(folders={'INBOX': {1: [set(), _headers('a@x')]}}, special={})
+    M = connect(Account('p', '127.0.0.1', port, 'u', 'x', tls='none'))
+
+    # When we fetch its headers since a date
+    fetch_headers(M, 'INBOX', 0, '2025-01-01', ['MESSAGE-ID', 'FROM'])
+    sent = b''.join(box.seen)
+
+    # Then the folder is opened with EXAMINE, the date bounds the search, and no body is asked for
+    assert b'EXAMINE INBOX' in sent and b' SELECT ' not in sent
+    assert b'UID 1:* SINCE 01-Jan-2025' in sent
+    assert b'BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM)]' in sent
+    assert b'BODY[' not in sent and b'BODY.PEEK[]' not in sent
