@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-"mail2context CLI. Read mail, rebuild threads, render context, draft replies, delete a draft by UID. Never sends."
+"mail2context CLI. Read mail, rebuild threads, fetch by pointer, render context, draft replies, delete a draft by UID. Never sends."
 import argparse
 import imaplib
+import json
 import re
 import ssl
 import sys
@@ -12,19 +13,19 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from mail2context.audit import audit_messages
-from mail2context.drafts import delete_draft, format_draft_row, list_drafts, parse_appenduid
+from mail2context.drafts import delete_draft, find_drafts_folder, format_draft_row, list_drafts, parse_appenduid
 from mail2context.compose import (build_message, build_reply, describe_attachments, expand_attachment_paths,
                                   list_participants)
 from mail2context.guard import describe_guard
 from mail2context.markdown_mail import render_markdown
-from mail2context.mailbox import (append_draft, check_account, connect, fetch_recent, find_sent_folder,
-                                  list_folders, list_message_dates, load_account, search_messages)
+from mail2context.mailbox import (append_draft, check_account, connect, fetch_messages, fetch_recent, fetch_thread_of,
+                                  find_sent_folder, list_folders, list_message_dates, load_account, parse_pointer,
+                                  search_messages)
 from mail2context.search import build_search_criteria, flags_of, is_unread
-from mail2context.render import render_thread
+from mail2context.render import extract_text, list_attachments, render_thread
 from mail2context.thread import group_threads, message_id, sent_at, thread_key
 
 ROOT = Path(__file__).resolve().parent.parent
-DRAFTS   = {'proton': 'Drafts',   'gmail': '[Gmail]/Drafts'}
 ALL_MAIL = {'proton': 'All Mail', 'gmail': '[Gmail]/All Mail'}   # Gmail namespaces its system folders
 TZ = ZoneInfo('Europe/Paris')                                    # the owner's clock, for draft dates
 
@@ -203,27 +204,99 @@ def cmd_export(a):
     M.logout()
 
 
+def _reply_draft(a, M, thread: list, files: list[Path]) -> None:
+    "Build the reply to `thread`'s last message, show recipients/threading/Drafts folder, then APPEND unless --dry-run."
+    drafts = a.drafts or find_drafts_folder(M)     # special-use; refuses to guess, before anything is shown as ready
+    body = Path(a.file).read_text() if a.file else sys.stdin.read()
+    acct = load_account(a.account)
+    sig_t, sig_h = _signature(a)
+    msg = build_reply(thread, body=body, frm=acct.user, to=a.to, reply_all=a.all,
+                      markdown=not a.plain, signature_text=sig_t, signature_html=sig_h, attachments=files)
+    addressed = {x.strip().lower() for x in f"{msg['To']},{msg['Cc'] or ''}".split(',') if x.strip()}
+    omitted = [w for w in list_participants(thread, acct.user) if w.lower() not in addressed]
+    print(f"draft to: {msg['To']}")
+    if msg['Cc']: print(f"cc      : {msg['Cc']}")
+    print(f"subject : {msg['Subject']}\nthreaded: {msg['In-Reply-To']}\ndrafts  : {drafts}")
+    if omitted:
+        print(f"OMITTED : {', '.join(omitted)}")
+        print("          this thread has other participants — pass --all to copy them in")
+    if a.account == 'proton':
+        print("PROTON  : Bridge strips In-Reply-To on draft APPEND (D-009), so this draft will not thread in your Proton UI")
+    if files: print('\n'.join(describe_attachments(files)))
+    if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); return
+    _print_append(append_draft(M, drafts, msg))
+
+
 def cmd_draft(a):
     "Create a reply draft on the thread. Appends to Drafts; never sends (D-003)."
     files = _attachments(a)                        # a missing file fails before the thread is fetched
     M, threads = _load(a.account, _folder(a), a.limit)
-    t = _pick(threads, a.key)
-    body = Path(a.file).read_text() if a.file else sys.stdin.read()
-    acct = load_account(a.account)
-    sig_t, sig_h = _signature(a)
-    msg = build_reply(t, body=body, frm=acct.user, to=a.to, reply_all=a.all,
-                      markdown=not a.plain, signature_text=sig_t, signature_html=sig_h, attachments=files)
-    addressed = {x.strip().lower() for x in f"{msg['To']},{msg['Cc'] or ''}".split(',') if x.strip()}
-    omitted = [w for w in list_participants(t, acct.user) if w.lower() not in addressed]
-    print(f"draft to: {msg['To']}")
-    if msg['Cc']: print(f"cc      : {msg['Cc']}")
-    print(f"subject : {msg['Subject']}\nthreaded: {msg['In-Reply-To']}")
-    if omitted:
-        print(f"OMITTED : {', '.join(omitted)}")
-        print("          this thread has other participants — pass --all to copy them in")
-    if files: print('\n'.join(describe_attachments(files)))
-    if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); M.logout(); return
-    _print_append(append_draft(M, a.drafts or DRAFTS[a.account], msg))
+    _reply_draft(a, M, _pick(threads, a.key), files)
+    M.logout()
+
+
+def _wants(a) -> list[tuple]:
+    "(pointer, Message-ID) pairs from repeated --pointer / --message-id; paired by position when both are given."
+    ptrs, mids = [parse_pointer(p) for p in a.pointer], list(a.message_id)
+    for p in ptrs:
+        if p.account != a.account: raise SystemExit(f"pointer is for account {p.account!r}, not {a.account!r}: {p}")
+    if ptrs and mids and len(ptrs) != len(mids): raise SystemExit("give one --message-id per --pointer, or only one kind")
+    if not ptrs and not mids: raise SystemExit("give --pointer and/or --message-id")
+    return list(zip(ptrs, mids)) if ptrs and mids else [(p, None) for p in ptrs] + [(None, m) for m in mids]
+
+
+def _fetch_wanted(a) -> tuple:
+    "Connect and fetch every wanted message. Returns (connection, list of Found)."
+    wants = _wants(a)                              # parse errors exit before any connection
+    load_dotenv(ROOT / '.env')
+    M = connect(load_account(a.account))
+    return M, fetch_messages(M, a.account, wants)
+
+
+def _as_record(f, raw: bool) -> dict:
+    "One fetched message as a JSON-ready dict; header fields and body are None when it was not found."
+    m = f.msg
+    hdr = (lambda h: str(m[h]) if m and m[h] is not None else None)
+    return {'found': m is not None, 'path': f.path, 'pointer': str(f.pointer) if f.pointer else None,
+            'message_id': message_id(m) if m else None, **{k.lower().replace('-', '_'): hdr(k) for k in
+            ('From', 'To', 'Cc', 'Date', 'Subject', 'In-Reply-To', 'References')},
+            'flags': sorted(flags_of(m)) if m else None, 'attachments': list_attachments(m) if m else None,
+            'body': extract_text(m, strip_quotes=not raw) if m else None}
+
+
+def cmd_message(a):
+    "Fetch messages by pointer and/or Message-ID, read-only. Markdown on stdout; which lookup answered goes to stderr."
+    M, found = _fetch_wanted(a)
+    M.logout()
+    if a.json: print(json.dumps([_as_record(f, a.raw) for f in found], ensure_ascii=False, indent=2))
+    for f in found:
+        print(f"answered by: {f.path}{'  ' + str(f.pointer) if f.pointer else ''}", file=sys.stderr)
+        if f.msg and not a.json: sys.stdout.write(render_thread([f.msg], strip_quotes=not a.raw))
+    if any(f.msg is None for f in found): raise SystemExit(1)
+
+
+def cmd_thread_of(a):
+    "Print the thread around one Message-ID, found by server-side search, not a recent window. Read-only."
+    load_dotenv(ROOT / '.env')
+    M = connect(load_account(a.account))
+    msgs, how = fetch_thread_of(M, a.message_id)
+    M.logout()
+    print(f"found by {how}: {len(msgs)} messages", file=sys.stderr)
+    if 'X-GM-THRID' in how: print("  this is Gmail's conversation, which can also group by subject", file=sys.stderr)
+    else: print("  a reply whose client dropped In-Reply-To and References cannot be found this way", file=sys.stderr)
+    if not msgs: raise SystemExit(f"{a.message_id} is not in the all-mail folder")
+    sys.stdout.write(render_thread(msgs, strip_quotes=not a.raw))
+
+
+def cmd_draft_to(a):
+    "Create a reply draft to ONE message, named by --message-id or --pointer. Appends to Drafts; never sends (D-003)."
+    files = _attachments(a)
+    if len(_wants(a)) != 1: raise SystemExit("draft-to answers exactly one message: one --message-id and/or one --pointer")
+    M, (found,) = _fetch_wanted(a)
+    print(f"reply to: {found.path}{'  ' + str(found.pointer) if found.pointer else ''}")
+    if not found.msg: M.logout(); raise SystemExit(1)
+    print(f"          {found.msg['From']} — {found.msg['Date']} — {found.msg['Subject']}")
+    _reply_draft(a, M, [found.msg], files)
     M.logout()
 
 
@@ -242,7 +315,7 @@ def cmd_compose(a):
     if files: print('\n'.join(describe_attachments(files)))
     if a.dry_run: print("\n--- dry run, nothing written ---\n"); print(body); return
     M = connect(acct)
-    _print_append(append_draft(M, a.drafts or DRAFTS[a.account], msg))
+    _print_append(append_draft(M, a.drafts or find_drafts_folder(M), msg))
     M.logout()
 
 
@@ -355,6 +428,30 @@ def main():
     d.add_argument('--attach', action='extend', nargs='+', default=[], metavar='PATH',
                    help='file to attach, or a folder to attach whole (name order); repeatable')
     d.set_defaults(fn=cmd_draft)
+
+    def by_message(sp):
+        sp.add_argument('--account', default='proton', help='proton | gmail')
+        sp.add_argument('--pointer', action='append', default=[], help='imap://<account>/<folder>;UIDVALIDITY=<n>/;UID=<n>; repeatable')
+        sp.add_argument('--message-id', action='append', default=[], help='<id@host>, brackets optional; repeatable')
+        return sp
+
+    mg = by_message(sub.add_parser('message', help=cmd_message.__doc__))
+    mg.add_argument('--json', action='store_true'); mg.add_argument('--raw', action='store_true', help='keep quoted originals')
+    mg.set_defaults(fn=cmd_message)
+
+    to = sub.add_parser('thread-of', help=cmd_thread_of.__doc__); to.add_argument('--account', default='proton')
+    to.add_argument('--message-id', required=True); to.add_argument('--raw', action='store_true', help='keep quoted originals')
+    to.set_defaults(fn=cmd_thread_of)
+
+    dt = by_message(sub.add_parser('draft-to', help=cmd_draft_to.__doc__))
+    dt.add_argument('file', metavar='BODY', help='markdown body file'); dt.add_argument('--to'); dt.add_argument('--drafts')
+    dt.add_argument('--dry-run', action='store_true')
+    dt.add_argument('--all', action='store_true', help='Cc everyone else on that message')
+    dt.add_argument('--plain', action='store_true', help='do not interpret the body as markdown')
+    dt.add_argument('--no-signature', action='store_true')
+    dt.add_argument('--attach', action='extend', nargs='+', default=[], metavar='PATH',
+                    help='file to attach, or a folder to attach whole (name order); repeatable')
+    dt.set_defaults(fn=cmd_draft_to)
 
     c = sub.add_parser('compose', help=cmd_compose.__doc__)
     c.add_argument('--to', required=True); c.add_argument('--cc')

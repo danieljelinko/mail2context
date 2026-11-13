@@ -1,6 +1,7 @@
 # Progress
 
 ## In flight
+- **Fetch by pointer (`feat/fetch-by-pointer`, D-025)** — done and verified live; awaiting Dani's choice to merge/push.
 - **Track G — `mail-guard` built, install pending the owner.** `~/Work/tools/mail-guard` at `2d89c19`:
   89 tests green, Ruff clean. mail2context on `feat/guard-mode` (`main` was fast-forwarded to `539abf3`
   and pushed): `*_IMAP_TLS` / `*_SMTP_TLS` options, `just guard-status`, 115 tests. The owner runs
@@ -29,9 +30,13 @@
 
 | Date | Task | Verified by |
 |---|---|---|
+| 2026-11-13 | Live `draft-to` on round-trip `91fcac` message 3, both accounts, test drafts deleted; `mail` skill gained the new recipes | Owner named `91fcac` as the check messages. Read back: Proton draft 255 without `In-Reply-To` (D-009), Gmail draft 65895 with it and with References; each `draft-delete --dry-run` then `--yes`. Skill edited with the owner's leave |
+| 2026-11-13 | `just message` / `thread-of` / `draft-to`; Drafts by special-use in `draft`/`compose`; D-025 | 175 tests (was 153), red first: pointer hit, stale UIDVALIDITY → Message-ID, UID gone → All Mail, missing, duplicate copies, several pointers one connection, no `\All` refusal, thread-of by headers and by `X-GM-THRID`, `draft` to a `\Drafts` folder named Brouillons, refusal with no APPEND. Live on round-trip `91fcac` (own mail), both accounts: pointer, stale pointer, gone UID, Message-ID, several, missing; `thread-of` 6/6 on Proton (~5 s), Gmail's conversation 6 but a different six (learnings). `\Seen` untouched on an unread message per account |
+| 2026-11-13 | Merged `feat/header-read`; its D-023 renumbered D-024 (main's D-023 is attachments) | Doc-row conflicts only; `just check` green, 153 tests, 0 loss |
 | 2026-11-06 | Deleted the attachment test drafts at the owner's request | `draft-delete --dry-run` showed each row, then `--yes`: Proton 217, 218; Gmail 65831, 65832 |
 | 2026-11-06 | Merged `feat/draft-attachments` into `main` and pushed, as the owner chose | Owner confirmed Proton drafts 217 and 218 show their attachments in the web UI |
 | 2026-11-06 | `--attach` on `compose`/`draft`, `just compose-attach` / `draft-attach` (+ `-preview`), D-023 | 150 tests (was 136), red first: bytes/basename/accents, MIME guess + fallback, empty list, missing file, folder in name order, empty folder, CLI dry-run lists sizes against a refused port. Live read-back by filename + sha256: Proton 217/218, Gmail 65831/65832 (incl. a 5 MB file). `just check` green, 0 loss |
+| 2026-10-31 | `fetch_headers`, `read_folder_state` for com-index (D-024; numbered D-023 on its branch), on `feat/header-read` | `tests/test_mailbox.py`; live through com-index on both accounts, flags unchanged |
 | 2026-10-29 | Merged `feat/draft-delete` into `main` and pushed, as the owner chose | `git log origin/main` shows the merge; launch prompt `261029_0829__launch_prompt_draft_delete.md` committed with it |
 | 2026-10-29 | `just draft-list` / `just draft-delete UID` (D-022); `draft`/`compose` print `draft uid: N` | 136 tests (was 121): refusal outside Drafts (UID present only in INBOX, INBOX never opened), unknown UID, non-`\Draft`, no UIDPLUS, guard NO naming level 2, decline/dry-run writes nothing, delete spares an already-`\Deleted` neighbour (fails if swapped for bare EXPUNGE). Live: throwaway `test draft-delete` drafts Proton UID 199 and Gmail UID 65745 — dry-run left each in place, `--yes` removed each, unknown UID 999999 refused; neither went to Trash/Bin (permanent). Guard-level-1 refusal not live-tested: guard not installed |
 | 2026-09-19 | Multi-word and accented searches work; `just search` keeps quoted args whole | 121 tests (was 115): quoting, UTF-8 literal placed last, two-literal refusal against a plaintext fake; live on Bridge: `about "47 RUE DE SÉLESTAT / DEUXIEME ETAGE"` finds the thread. Four learnings rows; `mail` skill gained a search-semantics section and a worked example |

@@ -55,9 +55,13 @@ just accounts           # confirms both authenticate
 | `just thread KEY` | print that thread as markdown (quotes stripped) |
 | `just thread-raw KEY` | same, quoted originals kept — use when comparing against the mail UI |
 | `just export KEY` | write the thread to a markdown file |
+| `just message ACCOUNT --pointer 'imap://…' --message-id '<…>' [--json] [--raw]` | read-only: one message (either flag repeatable) — by pointer, else by Message-ID in the pointer's folder, then All Mail; stderr says which lookup answered |
+| `just thread-of ACCOUNT --message-id '<…>' [--raw]` | read-only: the thread around one message, searched on the server — Gmail by `X-GM-THRID`, Proton by References/In-Reply-To |
 | `just draft-preview KEY body.md` | show the reply that would be drafted, write nothing |
 | `just draft KEY body.md` | append the reply to **Drafts** — never sends |
 | `just draft-all KEY body.md` | same, but Cc everyone else in the thread |
+| `just draft-to-preview ACCOUNT --message-id '<…>' body.md` | show the reply to that ONE message (or `--pointer`), write nothing |
+| `just draft-to ACCOUNT --message-id '<…>' body.md` | **mutating**: append that reply to Drafts — never sends |
 | `just compose TO SUBJECT body.md` | draft a NEW conversation, not a reply |
 | `just draft-list [account]` | list Drafts: UID, Paris time, To, Subject, first body line |
 | `just draft-delete UID [account] [--dry-run\|--yes]` | delete **one** draft by UID, from Drafts only, after asking — permanent, no Trash copy |
@@ -115,8 +119,21 @@ twice.
 type. Write `just draft 9cb987c4 reply.md`, optionally `just draft 9cb987c4 reply.md gmail 900`.
 
 Reads use `BODY.PEEK`, so nothing is ever marked as read. The only writes are `just draft`,
-`just draft-all` and `just compose` (append to Drafts), and `just draft-delete`, which removes one
-draft by the UID that `draft` prints as `draft uid: N` (D-022).
+`just draft-all`, `just draft-to` and `just compose` (append to Drafts), and `just draft-delete`, which removes one
+draft by the UID that `draft` prints as `draft uid: N` (D-022). Every draft goes to the mailbox the server flags
+`\Drafts`; nothing flagged means a refusal, never a guess (`--drafts` overrides).
+
+### By message, not by thread key (for com-index / com-desk)
+
+A **pointer** is `imap://<account>/<folder>;UIDVALIDITY=<v>/;UID=<uid>`, as com-index stores it. `just message`
+fetches by it; when the folder's UIDVALIDITY changed or the UID is gone it searches the Message-ID in that folder,
+then in the mailbox flagged `\All`, and prints the current pointer of the copy that answered. Proton's All Mail
+often holds two copies of one message: the lowest UID is taken and the path says so. `draft-to` replies to that
+one message; `--all` copies in everyone on it. Proton strips `In-Reply-To` from the draft (D-009), and says so.
+
+`thread-of` does not use the recent window: on Gmail it is Gmail's conversation (`X-GM-THRID`), which splits at a
+subject change and joins same-subject mail with no threading headers; on Proton it follows Message-ID /
+References / In-Reply-To outward by server search, so a reply whose client dropped those headers is not found.
 
 A reply goes to the **last sender** only. Any other participants are listed as `OMITTED` in the
 preview — check that line before drafting, and use `draft-all` to copy them in.
@@ -157,7 +174,7 @@ mail2context/
   thread.py    rebuild threads from headers (union-find over Message-ID/In-Reply-To/References)
   render.py    body extraction, quote + signature stripping, thread → markdown
   compose.py   build replies with correct In-Reply-To / References
-  mailbox.py   IMAP connection, fetch, APPEND to Drafts
+  mailbox.py   IMAP connection, fetch (recent, headers-only, by pointer / Message-ID, thread-of), APPEND to Drafts
   audit.py     conversion-loss measurement
   send.py      TEMPORARY SMTP send behind the D-011 allowlist (deleted at Phase 6)
   roundtrip.py TEMPORARY round-trip assertions over fetched messages (deleted at Phase 6)

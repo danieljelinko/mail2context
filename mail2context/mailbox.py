@@ -11,12 +11,15 @@ from email.message import EmailMessage
 from email.parser import BytesParser
 
 from .search import _imap_date, annotate_flags, parse_flags
+from .thread import message_id, sent_at
 
-__all__ = ['Account', 'append_draft', 'check_account', 'connect', 'fetch_recent', 'find_sent_folder', 'find_special_folder', 'list_folders',
-           'list_message_dates', 'list_uids', 'load_account', 'move_message', 'search_messages']
+__all__ = ['Account', 'Found', 'Pointer', 'append_draft', 'check_account', 'connect', 'fetch_headers', 'fetch_message', 'fetch_messages',
+           'fetch_recent', 'fetch_thread_of', 'find_sent_folder', 'find_special_folder', 'list_folders',
+           'list_message_dates', 'list_uids', 'load_account', 'move_message', 'parse_pointer', 'read_folder_state', 'search_messages']
 
 _LOCAL = ('127.0.0.1', 'localhost')
 _TLS_MODES = ('starttls', 'tls', 'none')   # none: the mail-guard proxy's plaintext loopback listener
+_HEADER_BATCH = 1000                       # UIDs per FETCH: keeps a whole-mailbox command line within server limits
 
 
 @dataclass
@@ -120,6 +123,35 @@ def _fetch_uids(M: imaplib.IMAP4, uids: list[bytes]) -> list[EmailMessage]:
     return out
 
 
+def read_folder_state(M: imaplib.IMAP4, folder: str) -> tuple[int, int]:
+    "(UIDVALIDITY, UIDNEXT) of `folder`, by STATUS: the folder is not even opened."
+    _, data = M.status(_quote(folder), '(UIDVALIDITY UIDNEXT)')
+    text = data[0].decode('utf-8', 'replace')
+    return int(re.search(r'UIDVALIDITY (\d+)', text).group(1)), int(re.search(r'UIDNEXT (\d+)', text).group(1))
+
+
+def fetch_headers(M: imaplib.IMAP4, folder: str,
+                  after_uid: int,      # only UIDs above this; 0 for all
+                  since: str | None,   # ISO date, YYYY-MM-DD, or None for no bound
+                  fields: list[str],   # header names, e.g. ["MESSAGE-ID", "FROM"]
+                  ) -> list[tuple[int, EmailMessage]]:
+    "(UID, headers) of the messages in `folder` past `after_uid`, read-only, flags annotated. Only `fields` leave the server: no body."
+    M.select(_quote(folder), readonly=True)
+    criteria = ['UID', f'{after_uid + 1}:*'] + (['SINCE', _imap_date(since)] if since else [])
+    _, data = M.uid('search', None, *criteria)
+    uids = [u for u in (data[0].split() if data and data[0] else []) if int(u) > after_uid]  # `n:*` always matches the last message
+    want = f'(UID FLAGS BODY.PEEK[HEADER.FIELDS ({" ".join(fields)})])'
+    out = []
+    for i in range(0, len(uids), _HEADER_BATCH):
+        _, resp = M.uid('fetch', b','.join(uids[i:i + _HEADER_BATCH]), want)
+        for part in resp:
+            if not isinstance(part, tuple): continue
+            msg = BytesParser(policy=policy.default).parsebytes(part[1])
+            annotate_flags(msg, parse_flags(part[0]))
+            out.append((int(re.search(rb'UID (\d+)', part[0]).group(1)), msg))
+    return out
+
+
 def fetch_recent(M: imaplib.IMAP4, folder: str, limit: int) -> list[EmailMessage]:
     "Fetch the newest `limit` messages from `folder`, read-only."
     M.select(_quote(folder), readonly=True)
@@ -163,3 +195,149 @@ def move_message(M: imaplib.IMAP4, folder: str, uid: bytes, dest: str) -> str:
     M.select(_quote(folder))                       # not readonly: MOVE mutates
     typ, _ = M.uid("move", uid, _quote(dest))
     return f"{typ} {uid.decode()} -> {dest}"
+
+
+
+_POINTER_RE = re.compile(r'imap://([^/]+)/(.+);UIDVALIDITY=(\d+)/;UID=(\d+)')
+
+
+@dataclass(frozen=True)
+class Pointer:
+    "Where one copy of a message lives, as com-index stores it: imap://<account>/<folder>;UIDVALIDITY=<v>/;UID=<uid>."
+    account: str
+    folder: str
+    uidvalidity: int
+    uid: int
+    def __str__(self) -> str: return f'imap://{self.account}/{self.folder};UIDVALIDITY={self.uidvalidity}/;UID={self.uid}'
+
+
+def parse_pointer(text: str) -> Pointer:
+    "The `Pointer` that `text` spells. The folder is taken raw, as com-index writes it, slashes and spaces included."
+    m = _POINTER_RE.fullmatch(text.strip())
+    if not m: raise SystemExit(f"not a message pointer: {text!r} — expected imap://<account>/<folder>;UIDVALIDITY=<n>/;UID=<n>")
+    return Pointer(m[1], m[2], int(m[3]), int(m[4]))
+
+
+@dataclass
+class Found:
+    msg: EmailMessage | None   # None when no copy was found
+    pointer: Pointer | None    # where the copy that answered lives now
+    path: str                  # which lookup answered: "pointer", "Message-ID in <folder> …", or "missing …"
+
+
+def _bracket(mid: str) -> str: return mid.strip() if mid.strip().startswith('<') else f'<{mid.strip()}>'
+
+
+def _open_folder(M: imaplib.IMAP4, folder: str) -> int:
+    "Open `folder` read-only (EXAMINE) and return its UIDVALIDITY."
+    validity, _ = read_folder_state(M, folder)
+    M.select(_quote(folder), readonly=True)
+    return validity
+
+
+def _fetch_by_uid(M: imaplib.IMAP4, uids: list[int]) -> dict[int, EmailMessage]:
+    "Fetch `uids` from the selected folder, keyed by UID, flags annotated. BODY.PEEK, so nothing is marked \\Seen."
+    if not uids: return {}
+    _, resp = M.uid('fetch', ','.join(map(str, sorted(set(uids)))), '(UID FLAGS BODY.PEEK[])')
+    out = {}
+    for part in resp:
+        if not isinstance(part, tuple): continue
+        msg = BytesParser(policy=policy.default).parsebytes(part[1])
+        annotate_flags(msg, parse_flags(part[0]))
+        out[int(re.search(rb'UID (\d+)', part[0]).group(1))] = msg
+    return out
+
+
+def _search_uids(M: imaplib.IMAP4, *criteria: str) -> list[int]:
+    "UIDs in the selected folder matching `criteria`, ascending."
+    _, data = M.uid('search', None, *criteria)
+    return sorted(int(u) for u in (data[0].split() if data and data[0] else []))
+
+
+def _find_by_message_id(M: imaplib.IMAP4, account: str, folder: str, mid: str) -> Found | None:
+    "The lowest-UID copy in `folder` whose Message-ID is exactly `mid`; None when there is none."
+    validity = _open_folder(M, folder)
+    uids = _search_uids(M, 'HEADER', 'Message-ID', f'"{mid}"')
+    if not uids: return None                     # bracketed, so Proton's substring match cannot hit another id
+    copies = f', {len(uids)} copies, lowest UID taken' if len(uids) > 1 else ''
+    return Found(_fetch_by_uid(M, uids[:1])[uids[0]], Pointer(account, folder, validity, uids[0]), f'Message-ID in {folder}{copies}')
+
+
+def _all_mail(M: imaplib.IMAP4) -> str:
+    "The mailbox the server flags \\All. Refuses rather than guess from a name."
+    folder = find_special_folder(M, '\\All')
+    if not folder: raise SystemExit('no mailbox is flagged \\All on this server — refusing to guess which one holds all mail')
+    return folder
+
+
+def fetch_messages(M: imaplib.IMAP4, account: str,
+                   wants: list[tuple[Pointer | None, str | None]],  # (pointer, Message-ID); either may be None
+                   ) -> list[Found]:
+    """One `Found` per want, in order, over one connection, read-only. By pointer first; when its UIDVALIDITY
+    changed or its UID is gone, by Message-ID in the pointer's folder, then in the folder flagged \\All."""
+    out: list[Found | None] = [None] * len(wants)
+    why: dict[int, str] = {}
+    by_folder: dict[str, list[int]] = {}
+    for i, (p, _) in enumerate(wants):
+        if p: by_folder.setdefault(p.folder, []).append(i)
+    for folder, idx in by_folder.items():
+        validity = _open_folder(M, folder)
+        live = [i for i in idx if wants[i][0].uidvalidity == validity]
+        for i in idx:
+            if i not in live: why[i] = f'UIDVALIDITY of {folder} is {validity}, pointer has {wants[i][0].uidvalidity}'
+        got = _fetch_by_uid(M, [wants[i][0].uid for i in live])
+        for i in live:
+            p = wants[i][0]
+            if p.uid in got: out[i] = Found(got[p.uid], p, 'pointer')
+            else:            why[i] = f'UID {p.uid} is gone from {folder}'
+    for i, (p, mid) in enumerate(wants):
+        if out[i]: continue
+        stale = f' (pointer stale: {why[i]})' if p else ''
+        if not mid: out[i] = Found(None, None, f'missing{stale}; no Message-ID to search by'); continue
+        folders = list(dict.fromkeys([*([p.folder] if p else []), _all_mail(M)]))
+        hit = next((h for f in folders if (h := _find_by_message_id(M, account, f, _bracket(mid)))), None)
+        out[i] = (Found(hit.msg, hit.pointer, hit.path + stale) if hit else
+                  Found(None, None, f'missing: {_bracket(mid)} is in none of {", ".join(folders)}{stale}'))
+    return out
+
+
+def fetch_message(M: imaplib.IMAP4, account: str, pointer: Pointer | None, mid: str | None) -> Found:
+    "One message by `pointer`, falling back to its Message-ID `mid` — see `fetch_messages`."
+    return fetch_messages(M, account, [(pointer, mid)])[0]
+
+
+def _ids_of(m: EmailMessage) -> set[str]:
+    "This message's own Message-ID and every id it names in In-Reply-To and References."
+    return set(re.findall(r'<[^<>]+>', ' '.join(str(m.get(h, '') or '') for h in ('Message-ID', 'In-Reply-To', 'References'))))
+
+
+def _follow_headers(M: imaplib.IMAP4, start: dict[int, EmailMessage]) -> dict[int, EmailMessage]:
+    "Grow `start` to every message in the selected folder linked to it, either way, through Message-ID / References / In-Reply-To."
+    got, done = dict(start), set()
+    while todo := set().union(*map(_ids_of, got.values())) - done:
+        for x in todo:
+            new = {u for h in ('Message-ID', 'References', 'In-Reply-To') for u in _search_uids(M, 'HEADER', h, f'"{x}"')}
+            got |= _fetch_by_uid(M, sorted(new - got.keys()))
+        done |= todo
+    return got
+
+
+def fetch_thread_of(M: imaplib.IMAP4, mid: str) -> tuple[list[EmailMessage], str]:
+    """The messages of the thread holding Message-ID `mid`, oldest first, one per Message-ID, found on the server in the
+    folder flagged \\All — not in a recent window. Returns (messages, how they were found); ([], how) when `mid` is absent.
+    Gmail: its own conversation id, X-GM-THRID. Elsewhere: header search outward until no new id turns up, so a reply
+    whose client dropped In-Reply-To and References cannot be found."""
+    folder = _all_mail(M)
+    _open_folder(M, folder)
+    start = _search_uids(M, 'HEADER', 'Message-ID', f'"{_bracket(mid)}"')
+    _, caps = M.capability()                       # after LOGIN: the pre-login list can lack extensions
+    gmail = b'X-GM-EXT-1' in b' '.join(caps).upper().split()
+    how = f'X-GM-THRID in {folder}' if gmail else f'References/In-Reply-To search in {folder}'
+    if not start: return [], how
+    if gmail:
+        _, resp = M.uid('fetch', str(start[0]), '(X-GM-THRID)')
+        thrid = re.search(rb'X-GM-THRID (\d+)', b' '.join(r[0] if isinstance(r, tuple) else r for r in resp)).group(1).decode()
+        got = _fetch_by_uid(M, _search_uids(M, 'X-GM-THRID', thrid))
+    else: got = _follow_headers(M, _fetch_by_uid(M, start))
+    unique = {message_id(m) or f'#uid-{u}': m for u, m in sorted(got.items(), reverse=True)}   # duplicate copies: lowest UID kept
+    return sorted(unique.values(), key=sent_at), how
